@@ -1,0 +1,986 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>From wave to bits: converting analog data to binary</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+:root{
+  color-scheme: light;
+  --paper:#F4F7FB; --paper-glass:rgba(244,247,251,.86); --surface:#FFFFFF; --chip:#EAF0F7;
+  --ink:#18233D; --ink-soft:#4A5878; --grid:#DCE5F0; --grid-faint:#E7EDF5; --rule:#C3CFDF;
+  --analog:#C98200; --sample:#E0473A; --quant:#6A3FB5; --quant-tint:#EFE8FB;
+  --ok:#1F7A4D; --ok-tint:#E3F4EA; --bad:#B42318; --bad-tint:#FCE9E7; --focus:#2F6FEB;
+  --font-body:"Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display:"Bricolage Grotesque", "Atkinson Hyperlegible", system-ui, sans-serif;
+  --font-mono:"JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --paper:#0E1524; --paper-glass:rgba(14,21,36,.86); --surface:#162036; --chip:#1D2942;
+    --ink:#E7ECF5; --ink-soft:#A7B3C9; --grid:#26355290; --grid-faint:#131C2E; --rule:#33456A;
+    --analog:#F2B33D; --sample:#FF6B5E; --quant:#B08CFF; --quant-tint:#2A2346;
+    --ok:#4CC38A; --ok-tint:#173326; --bad:#FF7A6E; --bad-tint:#3A1C1C; --focus:#7AA7FF;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --paper:#0E1524; --paper-glass:rgba(14,21,36,.86); --surface:#162036; --chip:#1D2942;
+  --ink:#E7ECF5; --ink-soft:#A7B3C9; --grid:#26355290; --grid-faint:#131C2E; --rule:#33456A;
+  --analog:#F2B33D; --sample:#FF6B5E; --quant:#B08CFF; --quant-tint:#2A2346;
+  --ok:#4CC38A; --ok-tint:#173326; --bad:#FF7A6E; --bad-tint:#3A1C1C; --focus:#7AA7FF;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:calc(env(safe-area-inset-top,0px) + 72px); -webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font:17px/1.62 var(--font-body);
+  background-image:linear-gradient(var(--grid-faint) 1px,transparent 1px),linear-gradient(90deg,var(--grid-faint) 1px,transparent 1px);
+  background-size:24px 24px;
+}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--paper-glass);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+img,canvas{max-width:100%}
+
+/* progress bar */
+.progress{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--paper-glass);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-bottom:1px solid var(--rule)}
+.progress .in{max-width:820px;margin:0 auto;padding:10px 20px;display:flex;align-items:center;gap:8px;overflow-x:auto}
+.progress .who{font-weight:700;margin-right:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;font-size:.95rem}
+.progress a{flex:none;display:grid;place-items:center;width:32px;height:32px;border-radius:50%;border:1.5px solid var(--rule);color:var(--ink-soft);text-decoration:none;font:700 .85rem var(--font-mono);background:var(--surface)}
+.progress a.done{background:var(--ok);border-color:var(--ok);color:var(--surface)}
+.progress a.recap-link{width:auto;border-radius:16px;padding:0 12px;font-family:var(--font-body)}
+
+/* hero */
+.hero{max-width:1040px;margin:0 auto;padding:36px 20px 8px}
+.hero-text{max-width:720px;margin:0 auto}
+#recap:empty{display:none}
+.home-link{display:inline-block;margin-bottom:8px;color:var(--ink-soft);font-weight:700;font-size:.95rem}
+.hero canvas{display:block;width:100%;height:220px}
+.hero h1{font:800 clamp(2.6rem,8vw,4.8rem)/1 var(--font-display);letter-spacing:-.025em;margin:18px 0 14px;max-width:12ch}
+.hero .lede{font-size:1.15rem;max-width:58ch;color:var(--ink-soft);margin:0}
+
+main{max-width:760px;margin:0 auto;padding:0 20px 80px}
+.idcard{margin:32px 0 0;background:var(--surface);border:1px solid var(--rule);border-radius:12px;padding:18px 20px;display:grid;grid-template-columns:2fr 1fr;gap:14px 16px}
+.idcard p{grid-column:1/-1;margin:0;color:var(--ink-soft);font-size:.95rem}
+label.field{display:flex;flex-direction:column;gap:4px;font-weight:700;font-size:.95rem}
+input[type=text],input[type=number],select,textarea{font:inherit;color:var(--ink);background:var(--surface);border:1.5px solid var(--rule);border-radius:8px;padding:9px 11px;width:100%}
+textarea{min-height:96px;resize:vertical;line-height:1.5}
+@media (max-width:560px){.idcard{grid-template-columns:1fr}}
+
+/* sections */
+section.step{margin:84px 0 0}
+.step-head{display:flex;align-items:baseline;gap:14px;margin-bottom:6px}
+.step-no{font:800 3.2rem/1 var(--font-display);color:var(--analog);min-width:1.1ch}
+h2{font:800 clamp(1.7rem,4.6vw,2.2rem)/1.1 var(--font-display);letter-spacing:-.015em;margin:0}
+h3{font:600 1.3rem/1.2 var(--font-display);margin:40px 0 8px}
+p{margin:12px 0;max-width:68ch}
+.muted{color:var(--ink-soft)}
+.small{font-size:.92rem}
+code,.mono{font-family:var(--font-mono);font-size:.92em}
+
+.keyidea{background:var(--chip);border-radius:10px;padding:14px 18px;margin:26px 0 0}
+.keyidea strong{display:block;font-family:var(--font-display);font-size:1.05rem;margin-bottom:2px}
+.keyidea p{margin:4px 0}
+
+/* lab */
+.lab{background:var(--surface);border:1px solid var(--rule);border-radius:12px;overflow:hidden;margin:20px 0}
+.lab canvas{display:block;width:100%;height:270px}
+.lab canvas.short{height:190px}
+@media (max-width:560px){.lab canvas{height:230px}}
+.controls{border-top:1px solid var(--rule);padding:14px 16px;display:flex;flex-wrap:wrap;gap:14px 22px;align-items:center}
+.controls label{display:flex;align-items:center;gap:10px;font-weight:700;font-size:.95rem}
+.controls input[type=range]{accent-color:var(--quant);width:180px}
+.controls .val{font-family:var(--font-mono);font-weight:700;min-width:5ch}
+.readouts{display:flex;flex-wrap:wrap;gap:8px;padding:0 16px 14px}
+.chip{font-family:var(--font-mono);font-size:.82rem;background:var(--chip);border-radius:6px;padding:4px 9px}
+.chip.ok{background:var(--ok-tint);color:var(--ok)}
+.chip.bad{background:var(--bad-tint);color:var(--bad)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;padding:10px 16px 0;font-size:.88rem;color:var(--ink-soft)}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.sw{width:18px;height:0;border-top:3px solid;display:inline-block}
+.sw.dot{width:10px;height:10px;border:none;border-radius:50%}
+.sw.dash{border-top-style:dashed}
+
+/* buttons */
+button{font:inherit;cursor:pointer}
+.btn{background:var(--ink);color:var(--paper);border:none;border-radius:8px;padding:9px 16px;font-weight:700}
+.btn.secondary{background:transparent;color:var(--ink);border:1.5px solid var(--rule)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.big{padding:13px 22px;font-size:1.05rem}
+
+/* questions */
+.q{margin:26px 0;border-left:3px solid var(--quant);padding:2px 0 2px 16px}
+.q .prompt{font-weight:700;margin:0 0 10px}
+.opts{display:grid;gap:7px}
+.opt{display:block;width:100%;text-align:left;background:var(--surface);color:var(--ink);border:1.5px solid var(--rule);border-radius:8px;padding:10px 13px;line-height:1.45}
+.opt[aria-pressed=true]{border-color:var(--quant);background:var(--quant-tint)}
+.opt.right{border-color:var(--ok);background:var(--ok-tint)}
+.opt:disabled{cursor:default}
+.qrow{display:flex;align-items:center;gap:12px;margin-top:10px;flex-wrap:wrap}
+.fb{font-size:.95rem;flex:1 1 260px}
+.fb.ok{color:var(--ok)} .fb.no{color:var(--bad)}
+.numwrap{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.numwrap input{max-width:200px;font-family:var(--font-mono)}
+.levels{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.levels .cell{background:var(--surface);border:1px solid var(--rule);border-radius:8px;padding:10px}
+.levels .cell b{font-family:var(--font-mono);display:block;margin-bottom:6px}
+.levels input{font-family:var(--font-mono)}
+@media (max-width:560px){.levels{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* sort */
+.sort{display:grid;gap:6px}
+.sort .row{display:flex;align-items:center;gap:10px;background:var(--surface);border:1.5px solid var(--rule);border-radius:8px;padding:8px 10px}
+.sort .row .t{flex:1}
+.sort .row.ok{border-color:var(--ok)} .sort .row.no{border-color:var(--bad)}
+.seg{display:flex;border:1.5px solid var(--rule);border-radius:7px;overflow:hidden;flex:none}
+.seg button{background:transparent;border:none;color:var(--ink);padding:6px 11px;font-size:.9rem;font-weight:700}
+.seg button[aria-pressed=true]{background:var(--ink);color:var(--paper)}
+
+/* encode */
+.enc{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:8px;padding:14px 16px;border-top:1px solid var(--rule)}
+.enc label{display:flex;flex-direction:column;gap:4px;font-size:.8rem;color:var(--ink-soft);text-align:center}
+.enc input{text-align:center;font-family:var(--font-mono);font-weight:700;padding:8px 2px}
+.enc input.ok{border-color:var(--ok);background:var(--ok-tint)} .enc input.no{border-color:var(--bad);background:var(--bad-tint)}
+@media (max-width:560px){.enc{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.bitstream{font-family:var(--font-mono);font-size:1.15rem;word-break:break-all;background:var(--chip);border-radius:8px;padding:12px 14px;margin:12px 0 0}
+.bitstream .grp:nth-child(odd){color:var(--quant)}
+
+/* calculator */
+.calc{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;padding:16px}
+@media (max-width:640px){.calc{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.calc-out{padding:0 16px 16px}
+.calc-out .big{font:700 1.6rem/1.2 var(--font-mono)}
+.presets{display:flex;flex-wrap:wrap;gap:8px;padding:14px 16px 0}
+
+/* recap */
+.status{margin:12px 0 0;font-weight:700;min-height:1.5em}
+.checklist{list-style:none;padding:0;margin:16px 0;display:grid;gap:6px}
+.checklist li{display:flex;gap:10px;align-items:center}
+.checklist .mark{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:.8rem;font-weight:700;border:1.5px solid var(--rule);flex:none}
+.checklist li.done .mark{background:var(--ok);border-color:var(--ok);color:var(--surface)}
+#recap{background:#fff;color:#18233D;border:1px solid var(--rule);border-radius:12px;padding:28px 30px;margin-top:24px;font-size:.95rem}
+#recap h4{font:800 1.5rem/1.15 var(--font-display);margin:0 0 4px}
+#recap h5{font:700 1.1rem var(--font-display);margin:24px 0 6px;border-bottom:1px solid #C3CFDF;padding-bottom:4px}
+#recap .qa{margin:10px 0}
+#recap .qa .p{font-weight:700}
+#recap .qa .a{white-space:pre-wrap;margin-left:12px}
+#recap .qa .r{margin-left:12px;font-size:.88rem;color:#4A5878}
+#recap img{display:block;width:100%;max-width:560px;border:1px solid #DCE5F0;border-radius:6px;margin:8px 0 2px}
+#recap .cap{font-size:.85rem;color:#4A5878}
+#recap ul{margin:6px 0;padding-left:20px}
+footer{max-width:760px;margin:0 auto;padding:30px 20px 60px;color:var(--ink-soft);font-size:.9rem;border-top:1px solid var(--rule)}
+footer .btn{margin-top:10px}
+
+@media (prefers-reduced-motion: reduce){*{scroll-behavior:auto!important}}
+@media print{
+  @page{margin:.6in}
+  body{background:#fff!important}
+  body::before{display:none}
+  body *{visibility:hidden}
+  #recap,#recap *{visibility:visible}
+  #recap{position:absolute;left:0;top:0;width:100%;border:none;padding:0;margin:0}
+  #recap h5{break-after:avoid}
+  #recap .qa,#recap img{break-inside:avoid}
+}
+</style>
+</head>
+<body>
+
+<nav class="progress" aria-label="Lesson progress">
+  <div class="in">
+    <span class="who" id="who">Converting analog data to binary</span>
+    <a href="#analog" data-sec="0" aria-label="1: Analog vs. digital">1</a>
+    <a href="#sampling" data-sec="1" aria-label="2: Sampling">2</a>
+    <a href="#quantization" data-sec="2" aria-label="3: Quantization">3</a>
+    <a href="#encoding" data-sec="3" aria-label="4: Binary encoding">4</a>
+    <a href="#listen" data-sec="4" aria-label="5: Hear the difference">5</a>
+    <a href="#storage" data-sec="5" aria-label="6: The cost of quality">6</a>
+    <a href="#check" data-sec="6" aria-label="7: Check your understanding">7</a>
+    <a href="#recap-section" class="recap-link">Recap</a>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="hero-text"><a class="home-link" href="../">AP CSP class home</a></div>
+  <canvas id="hero" aria-label="A smooth sound wave that becomes sampled points, then rounded steps, then binary numbers"></canvas>
+  <div class="hero-text"><h1>From wave to bits</h1>
+  <p class="lede">Everything you see and hear changes smoothly. A computer can only store a finite list of 0s and 1s. In this lesson you’ll take a sound apart the way a computer does: sample it, round it, encode it, then listen to what survived.</p></div>
+</header>
+
+<main>
+  <div class="idcard">
+    <label class="field">Your name<input type="text" id="name" autocomplete="name" placeholder="First and last name"></label>
+    <label class="field">Class period<input type="text" id="period" placeholder="e.g. 3"></label>
+    <p>Your work saves in this browser as you go. At the end you’ll download a PDF recap of everything you did and upload it to Canvas.</p>
+  </div>
+
+  <!-- 1 -->
+  <section class="step" id="analog">
+    <div class="step-head"><span class="step-no">1</span><h2>Analog vs. digital</h2></div>
+    <p>The real world is <strong>analog</strong>. Sound, light, and temperature change smoothly, and between any two moments there’s always another moment with its own exact value. Zoom in on a sound wave as far as you like and there is still more detail.</p>
+    <p>A computer can’t store infinite detail. It stores <strong>digital</strong> data: a finite list of values, each written in binary. You already know how numbers and text become binary. This lesson tackles the harder problem: turning a continuous signal, like your voice, into bits.</p>
+    <h3>Sort these</h3>
+    <p class="muted small">Decide whether each one is analog (smooth, continuous) or digital (a finite set of stored values).</p>
+    <div id="sortq"></div>
+    <div class="q" data-q="fr_diff"></div>
+    <div class="keyidea"><strong>Key idea</strong><p>Analog data changes smoothly and has infinite detail. Digital data is a finite set of separate values stored in binary, so a digital version of anything analog is always an approximation.</p></div>
+  </section>
+
+  <!-- 2 -->
+  <section class="step" id="sampling">
+    <div class="step-head"><span class="step-no">2</span><h2>Sampling</h2></div>
+    <p>The first step is to measure the signal at regular time intervals. Each measurement is a <strong>sample</strong>. The time between samples is the <strong>sampling interval</strong>, and the number of samples per second is the <strong>sampling rate</strong>.</p>
+    <p>Below is 330 milliseconds of a sound wave. Change the sampling interval and watch what the computer can rebuild from its samples alone.</p>
+    <div class="lab">
+      <div class="legend">
+        <span><i class="sw" style="border-color:var(--analog)"></i>Original analog signal</span>
+        <span><i class="sw dot" style="background:var(--sample)"></i>Samples</span>
+        <span><i class="sw dash" style="border-color:var(--ink)"></i>Rebuilt from the samples</span>
+      </div>
+      <canvas id="cvSamp" aria-label="Sampling demo graph"></canvas>
+      <div class="controls">
+        <label for="interval">Sampling interval <input type="range" id="interval" min="5" max="60" step="5"> <span class="val" id="intervalVal"></span></label>
+        <label><input type="checkbox" id="recon"> Show rebuilt wave</label>
+      </div>
+      <div class="readouts" id="sampReadout"></div>
+    </div>
+    <div class="q" data-q="samp_mc"></div>
+
+    <h3>When sampling goes wrong: aliasing</h3>
+    <p>Sample too slowly and a fast signal can look like a slower one that was never there. That’s <strong>aliasing</strong>, the same effect that makes car wheels seem to spin backward in videos. The <strong>Nyquist–Shannon sampling theorem</strong> says the sampling rate must be greater than twice the highest frequency in the signal. Frequency is cycles per second, measured in hertz (Hz).</p>
+    <p>This wave repeats 5 times per second (5 Hz). Slide the sampling rate down and watch what the computer “sees.”</p>
+    <div class="lab">
+      <div class="legend">
+        <span><i class="sw" style="border-color:var(--analog)"></i>Real 5 Hz signal</span>
+        <span><i class="sw dot" style="background:var(--sample)"></i>Samples</span>
+        <span><i class="sw dash" style="border-color:var(--ink)"></i>The slowest wave that fits the samples</span>
+      </div>
+      <canvas id="cvAlias" class="short" aria-label="Aliasing demo graph"></canvas>
+      <div class="controls">
+        <label for="arate">Sampling rate <input type="range" id="arate" min="2" max="40" step="1"> <span class="val" id="arateVal"></span></label>
+      </div>
+      <div class="readouts" id="aliasReadout"></div>
+    </div>
+    <div class="q" data-q="alias_mc"></div>
+    <div class="q" data-q="nyq"></div>
+    <div class="keyidea"><strong>Key idea</strong><p>Sampling turns a continuous stream into a finite list of measurements. Music is usually recorded at 44,100 or 48,000 samples per second, just over twice the roughly 20,000 Hz limit of human hearing. Phone calls use 8,000, since speech mostly stays below 4,000 Hz.</p></div>
+  </section>
+
+  <!-- 3 -->
+  <section class="step" id="quantization">
+    <div class="step-head"><span class="step-no">3</span><h2>Quantization</h2></div>
+    <p>After sampling we have a finite number of samples, but each one could still be any value, like 47.8291824806 volts. <strong>Quantization</strong> rounds every sample to the nearest of a fixed set of levels. The number of bits used to store each sample is the <strong>bit depth</strong>. With <span class="mono">n</span> bits you get 2<sup>n</sup> levels.</p>
+    <p>The difference between the real value and the rounded value is the <strong>quantization error</strong>. Every sample also has to fit inside the converter’s range, here −100 to 100 volts.</p>
+    <div class="lab">
+      <div class="legend">
+        <span><i class="sw" style="border-color:var(--analog)"></i>Analog signal</span>
+        <span><i class="sw dot" style="background:var(--quant)"></i>Rounded (quantized) sample</span>
+        <span><i class="sw" style="border-color:var(--sample)"></i>Quantization error</span>
+        <span><i class="sw" style="border-color:var(--quant);opacity:.4"></i>Available levels</span>
+      </div>
+      <canvas id="cvQuant" aria-label="Quantization demo graph"></canvas>
+      <div class="controls">
+        <label for="bits">Bit depth <input type="range" id="bits" min="1" max="6" step="1"> <span class="val" id="bitsVal"></span></label>
+        <label for="gain">Input level <input type="range" id="gain" min="50" max="160" step="10"> <span class="val" id="gainVal"></span></label>
+      </div>
+      <div class="readouts" id="quantReadout"></div>
+    </div>
+    <div class="q">
+      <p class="prompt">Fill in the table: how many levels (separate values) can each bit depth represent? <span class="muted small">Press Enter after each one to check it.</span></p>
+      <div class="levels">
+        <div class="cell" data-q="lv2"></div>
+        <div class="cell" data-q="lv8"></div>
+        <div class="cell" data-q="lv12"></div>
+        <div class="cell" data-q="lv16"></div>
+      </div>
+    </div>
+    <div class="q" data-q="quant_mc"></div>
+    <div class="q" data-q="clip_mc"></div>
+    <div class="keyidea"><strong>Key idea</strong><p>Quantization rounds each sample to one of 2<sup>n</sup> levels. More bits per sample means more levels, which means less quantization error. Anything outside the range gets clipped, and that detail is gone for good.</p></div>
+  </section>
+
+  <!-- 4 -->
+  <section class="step" id="encoding">
+    <div class="step-head"><span class="step-no">4</span><h2>Binary encoding</h2></div>
+    <p>Once every sample sits on one of a fixed set of levels, the computer doesn’t need to store voltages at all. It numbers the levels 0, 1, 2… and stores each sample’s level number in binary. With 3 bits per sample there are 8 levels, numbered 0 through 7, which is <span class="mono">000</span> through <span class="mono">111</span>.</p>
+    <p><strong>Your turn:</strong> read each sample’s level from the graph and type it as a 3-bit binary number.</p>
+    <div class="lab">
+      <canvas id="cvEnc" aria-label="Eight quantized samples at levels 3, 6, 7, 5, 2, 0, 1 and 4"></canvas>
+      <div class="enc" id="encInputs"></div>
+      <div class="qrow" style="padding:0 16px 16px"><button class="btn" type="button" id="encCheck">Check my encoding</button><span class="fb" id="encFb" aria-live="polite"></span></div>
+    </div>
+    <div id="bitstreamWrap" hidden>
+      <p>Here’s the whole recording as the computer stores it: 8 samples × 3 bits = 24 bits.</p>
+      <div class="bitstream" id="bitstream"></div>
+    </div>
+    <div class="q" data-q="meta_mc"></div>
+    <div class="keyidea"><strong>Key idea</strong><p>Encoding stores each sample’s level as an n-bit binary number. The file also has to record how it was made (the sampling rate and bit depth) or the bits can’t be turned back into sound.</p></div>
+  </section>
+
+  <!-- 5 -->
+  <section class="step" id="listen">
+    <div class="step-head"><span class="step-no">5</span><h2>Hear the difference</h2></div>
+    <p>Here’s a short melody generated at full quality. Lower the sampling rate and bit depth, then listen to what the computer keeps. The graph zooms in on 6 milliseconds of the sound so you can see the samples and levels.</p>
+    <p class="muted small">Use headphones or keep your volume low. Very low bit depths sound harsh.</p>
+    <div class="lab">
+      <div class="legend">
+        <span><i class="sw" style="border-color:var(--analog)"></i>Original</span>
+        <span><i class="sw" style="border-color:var(--quant)"></i>Digitized (what you hear)</span>
+      </div>
+      <canvas id="cvAudio" class="short" aria-label="Close-up of the original and digitized sound wave"></canvas>
+      <div class="controls">
+        <label for="arRate">Sampling rate
+          <select id="arRate" style="width:auto">
+            <option value="48000">48,000 per sec</option><option value="22050">22,050 per sec</option><option value="11025">11,025 per sec</option><option value="8000">8,000 per sec</option><option value="4000">4,000 per sec</option><option value="2000">2,000 per sec</option><option value="1000">1,000 per sec</option>
+          </select></label>
+        <label for="arBits">Bit depth
+          <select id="arBits" style="width:auto">
+            <option value="16">16 bits</option><option value="8">8 bits</option><option value="6">6 bits</option><option value="4">4 bits</option><option value="3">3 bits</option><option value="2">2 bits</option><option value="1">1 bit</option>
+          </select></label>
+      </div>
+      <div class="controls">
+        <button class="btn" type="button" id="playDig">Play digitized</button>
+        <button class="btn secondary" type="button" id="playOrig">Play original</button>
+        <button class="btn secondary" type="button" id="stopAud">Stop</button>
+      </div>
+      <div class="readouts" id="audReadout"></div>
+    </div>
+    <div class="q" data-q="aud_rate"></div>
+    <div class="q" data-q="aud_depth"></div>
+    <div class="q" data-q="aud_obs"></div>
+  </section>
+
+  <!-- 6 -->
+  <section class="step" id="storage">
+    <div class="step-head"><span class="step-no">6</span><h2>The cost of quality</h2></div>
+    <p>Every improvement in quality costs storage space. For uncompressed audio:</p>
+    <p class="mono" style="background:var(--chip);border-radius:8px;padding:10px 14px">bits = sampling rate × bit depth × channels × seconds</p>
+    <p>Stereo sound has 2 channels (left and right). Divide bits by 8 to get bytes.</p>
+    <div class="lab">
+      <div class="presets">
+        <button class="btn secondary" type="button" data-preset="8000,8,1">Phone call</button>
+        <button class="btn secondary" type="button" data-preset="44100,16,2">CD</button>
+        <button class="btn secondary" type="button" data-preset="96000,24,2">Studio</button>
+      </div>
+      <div class="calc">
+        <label class="field">Samples per second<input type="number" id="cRate" min="1" value="44100"></label>
+        <label class="field">Bit depth<select id="cBits"><option>8</option><option selected>16</option><option>24</option></select></label>
+        <label class="field">Channels<select id="cCh"><option value="1">1 (mono)</option><option value="2" selected>2 (stereo)</option></select></label>
+        <label class="field">Seconds<input type="number" id="cSec" min="1" value="60"></label>
+      </div>
+      <div class="calc-out"><div class="big" id="cOut"></div><div class="muted small" id="cOut2"></div></div>
+    </div>
+    <div class="q" data-q="ratio"></div>
+    <div class="q" data-q="song"></div>
+    <div class="keyidea"><strong>Key idea</strong><p>The goal is to sample with enough detail to rebuild the signal at the quality you need without running out of space. Landline phones use low sampling rates and bit depths because the data travels over limited lines. Film studios record at very high settings so it holds up on a giant screen.</p></div>
+  </section>
+
+  <!-- 7 -->
+  <section class="step" id="check">
+    <div class="step-head"><span class="step-no">7</span><h2>Check your understanding</h2></div>
+    <p>These are written in the style of AP CSP exam questions.</p>
+    <div class="q" data-q="ap1"></div>
+    <div class="q" data-q="ap2"></div>
+    <div class="q" data-q="ap3"></div>
+    <div class="q" data-q="ap4"></div>
+    <h3>Reflect</h3>
+    <div class="q" data-q="refl_device"></div>
+    <div class="q" data-q="refl_image"></div>
+  </section>
+
+  <!-- recap -->
+  <section class="step" id="recap-section">
+    <div class="step-head"><span class="step-no">✓</span><h2>Recap and submit</h2></div>
+    <p>Finish every section, then download your PDF and upload it to the Canvas assignment. The PDF includes your answers, your graphs, and the key ideas from each step, so it doubles as your study notes.</p>
+    <ul class="checklist" id="checklist"></ul>
+    <p id="scoreLine" class="muted"></p>
+    <div class="qrow">
+      <button class="btn big" type="button" id="dlPdf">Download PDF</button>
+      <button class="btn secondary big" type="button" id="printPdf">Print or save as PDF</button>
+    </div>
+    <p class="status" id="status" aria-live="polite"></p>
+    <div id="recap" aria-label="Preview of your recap"></div>
+  </section>
+</main>
+
+<footer>
+  <p>Adapted from Khan Academy’s “Converting analog data to binary” (AP CSP DAT-1.A).</p>
+  <p><a href="../" style="color:inherit">Back to AP CSP class home</a></p>
+  <button class="btn secondary" type="button" id="reset">Erase my answers and start over</button>
+</footer>
+
+<script>
+(function(){
+'use strict';
+
+/* ---------- state ---------- */
+const STORE='a2d-lesson-v1';
+const DEF_SET={interval:30,recon:true,arate:30,bits:3,gain:100,enc:['','','','','','','',''],arRate:'48000',arBits:'16'};
+let S={name:'',period:'',ans:{},set:JSON.parse(JSON.stringify(DEF_SET))};
+try{
+  const raw=localStorage.getItem(STORE);
+  if(raw){const o=JSON.parse(raw); S.name=o.name||''; S.period=o.period||''; S.ans=o.ans||{}; S.set=Object.assign({},DEF_SET,o.set||{});}
+}catch(e){}
+let saveT=null;
+function save(){ clearTimeout(saveT); saveT=setTimeout(()=>{try{localStorage.setItem(STORE,JSON.stringify(S));}catch(e){}},150); updateProgress(); }
+function A(id){ return S.ans[id]||(S.ans[id]={}); }
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt=n=>n.toLocaleString('en-US');
+const parseNum=s=>{const v=parseFloat(String(s).replace(/[, ]/g,''));return isFinite(v)?v:null;};
+
+/* ---------- questions ---------- */
+const SORT=[
+  ['Your voice traveling through the air','analog'],
+  ['The groove cut into a vinyl record','analog'],
+  ['A text message stored on your phone','digital'],
+  ['Liquid rising in a glass thermometer','analog'],
+  ['An MP3 file','digital'],
+  ['Light passing through a camera lens','analog'],
+  ['A JPEG photo','digital'],
+  ['A list of daily temperatures in a spreadsheet','digital']
+];
+const Q={
+  sort:{sec:0,type:'sort',auto:true,prompt:'Sort: analog or digital?'},
+  fr_diff:{sec:0,type:'fr',prompt:'In your own words, what is the key difference between analog and digital data?'},
+  samp_mc:{sec:1,type:'mc',auto:true,prompt:'Drag the sampling interval from 5 ms up to 60 ms. What happens to the rebuilt (dashed) wave?',
+    options:['It matches the original better as the interval grows.','It loses detail: peaks get cut off and quick wiggles disappear.','Nothing changes; the number of samples doesn’t matter.','The wave gets louder.'],answer:1,
+    explain:'With fewer samples per second, the computer never measures what happens between them, so it can’t rebuild it.',hint:'Compare the dashed line to the original at 10 ms and at 60 ms.'},
+  alias_mc:{sec:1,type:'mc',auto:true,prompt:'Set the sampling rate to 6 per second. What does the computer “see”?',
+    options:['The same 5 Hz wave, just with fewer dots','A much slower wave (about 1 Hz) that wasn’t in the original','A flat line','A faster wave'],answer:1,
+    explain:'That’s aliasing. Sampling below twice the signal’s frequency makes a fast wave masquerade as a slow one.',hint:'Look at the dashed line and the “computer sees” readout at 6 per second.'},
+  nyq:{sec:1,type:'num',auto:true,prompt:'Human speech mostly stays below 4,000 Hz. According to the Nyquist–Shannon theorem, the sampling rate must be greater than how many samples per second?',
+    unit:'samples per second',check:v=>v===8000,explain:'Twice 4,000 Hz is 8,000, which is why phone calls are sampled at 8,000 per second.',hint:'The rate must be greater than twice the highest frequency.'},
+  lv2:{sec:2,type:'cell',auto:true,label:'2 bits',check:v=>v===4,explain:'2² = 4'},
+  lv8:{sec:2,type:'cell',auto:true,label:'8 bits',check:v=>v===256,explain:'2⁸ = 256'},
+  lv12:{sec:2,type:'cell',auto:true,label:'12 bits',check:v=>v===4096,explain:'2¹² = 4,096'},
+  lv16:{sec:2,type:'cell',auto:true,label:'16 bits',check:v=>v===65536,explain:'2¹⁶ = 65,536'},
+  quant_mc:{sec:2,type:'mc',auto:true,prompt:'Slide the bit depth from 1 up to 6 (keep the input level at 100%). Why does the average error shrink?',
+    options:['More bits make the computer measure faster.','More bits give more levels, so each sample can be rounded to a closer value.','More bits add more samples per second.','It doesn’t really shrink; it just looks smaller on the graph.'],answer:1,
+    explain:'Each extra bit doubles the number of levels and halves the gap between them, so the rounding error gets smaller.',hint:'Watch the purple level lines as you add bits.'},
+  clip_mc:{sec:2,type:'mc',auto:true,prompt:'Turn the input level above 100%. What happens to the loudest parts of the wave?',
+    options:['They’re stored with extra bits.','They’re flattened at the highest and lowest levels, and that detail is lost for good.','They wrap around to the bottom of the scale.','They’re sampled more often.'],answer:1,
+    explain:'That’s clipping. Values outside the converter’s range all get stored as the maximum or minimum level.',hint:'Look at the samples inside the shaded zones.'},
+  enc:{sec:3,type:'enc',auto:true,prompt:'Encode 8 samples as 3-bit binary numbers'},
+  meta_mc:{sec:3,type:'mc',auto:true,prompt:'A friend sends you only the bits 101100010111011001110000 with no other information. Why can’t your computer play it back correctly?',
+    options:['It needs the bit depth and sampling rate to know how to split up the bits and how fast to play the samples.','Binary can’t represent sound.','24 bits is too short to be audio.','It also needs the original analog wave.'],answer:0,
+    explain:'The same bits mean different things with a different bit depth or sampling rate, so audio files store those settings too.',hint:'How would the computer know where one sample ends and the next begins?'},
+  aud_rate:{sec:4,type:'select',prompt:'Keep the bit depth at 16 and lower the sampling rate. What’s the lowest rate where you can still recognize the melody?',
+    options:['48,000 per sec','22,050 per sec','11,025 per sec','8,000 per sec','4,000 per sec','2,000 per sec','1,000 per sec']},
+  aud_depth:{sec:4,type:'select',prompt:'Now set the rate back to 48,000 and lower the bit depth. What’s the lowest bit depth that still sounds acceptable to you?',
+    options:['16 bits','8 bits','6 bits','4 bits','3 bits','2 bits','1 bit']},
+  aud_obs:{sec:4,type:'fr',prompt:'Describe what changed in the sound when you lowered the sampling rate, then what changed when you lowered the bit depth. Use the words “sampling” and “quantization.”'},
+  ratio:{sec:5,type:'num',auto:true,prompt:'For each second of audio, about how many times more bits does CD quality (44,100 samples/s, 16-bit, 2 channels) use than a phone call (8,000 samples/s, 8-bit, 1 channel)?',
+    unit:'times more',check:v=>v>=21.5&&v<=22.6,explain:'CD: 44,100 × 16 × 2 = 1,411,200 bits per second. Phone: 8,000 × 8 × 1 = 64,000. 1,411,200 ÷ 64,000 ≈ 22.',hint:'Work out bits per second for each, then divide.'},
+  song:{sec:5,type:'num',auto:true,prompt:'How many megabytes (MB) is a 3-minute song at CD quality? Use 1 MB = 1,000,000 bytes.',
+    unit:'MB',check:v=>v>=31&&v<=32.5,explain:'44,100 × 16 × 2 × 180 = 254,016,000 bits. ÷ 8 = 31,752,000 bytes, about 31.8 MB.',hint:'3 minutes is 180 seconds. Don’t forget to divide bits by 8.'},
+  ap1:{sec:6,type:'mc',auto:true,prompt:'Which statement best explains why a digital recording can’t perfectly reproduce the original sound?',
+    options:['Computers store sound as text, which loses information.','The recording is a finite number of samples, each rounded to one of a limited set of values.','Microphones can only detect sounds below 20 Hz.','Digital files always remove the high notes.'],answer:1,
+    explain:'Sampling skips what happens between samples and quantization rounds each sample, so some detail is always lost.'},
+  ap2:{sec:6,type:'mc',auto:true,prompt:'A podcaster keeps the same sampling rate but switches from 8 bits per sample to 16 bits per sample. Which is true?',
+    options:['Each sample can now be one of 65,536 values instead of 256, and the file is about twice as large.','Each sample can now be one of 16 values instead of 8, and the file size doesn’t change.','The recording now has twice as many samples per second.','The file is about half as large because each sample is more precise.'],answer:0,
+    explain:'2¹⁶ = 65,536 and 2⁸ = 256. Twice the bits per sample with the same number of samples means about twice the storage.'},
+  ap3:{sec:6,type:'mc',auto:true,prompt:'A sensor takes one measurement every 0.5 milliseconds. What is its sampling rate?',
+    options:['500 per second','2 per second','2,000 per second','5,000 per second'],answer:2,
+    explain:'1 second = 1,000 ms, and 1,000 ÷ 0.5 = 2,000 samples per second. The rate is the inverse of the interval.'},
+  ap4:{sec:6,type:'mc',auto:true,prompt:'Which change is most likely to reduce aliasing in a recording?',
+    options:['Lowering the bit depth','Increasing the sampling rate','Turning up the volume','Saving it as a smaller file'],answer:1,
+    explain:'Aliasing comes from sampling too slowly. Sampling faster than twice the highest frequency prevents it.'},
+  refl_device:{sec:6,type:'fr',prompt:'Find a device near you that turns analog data into digital data. What does it capture, what limits how much data it can store or send, and what detail is lost?'},
+  refl_image:{sec:6,type:'fr',prompt:'Looking ahead: a photo also starts as continuous light. What do you think a “sample” of an image would be? What would play the role of bit depth?'}
+};
+const SECTIONS=['Analog vs. digital','Sampling','Quantization','Binary encoding','Hear the difference','The cost of quality','Check your understanding'];
+const ORDER=Object.keys(Q);
+
+function isDone(id){
+  const q=Q[id], a=S.ans[id]||{};
+  if(q.type==='fr') return !!(a.value&&a.value.trim().split(/\s+/).length>=3);
+  if(q.type==='select') return a.value!=null&&a.value!=='';
+  return (a.tries||0)>0;
+}
+function resultText(id){
+  const q=Q[id], a=S.ans[id]||{};
+  if(!q.auto) return '';
+  if(!a.tries) return 'Not attempted';
+  if(q.type==='sort') return `${a.score||0} of ${SORT.length} correct`+(a.tries>1?` after ${a.tries} checks`:' on the first check');
+  if(a.correct) return a.tries===1?'Correct on the first try':`Correct after ${a.tries} tries`;
+  return `Not correct yet (${a.tries} ${a.tries===1?'try':'tries'})`;
+}
+function answerText(id){
+  const q=Q[id], a=S.ans[id]||{};
+  if(q.type==='mc') return a.value!=null?q.options[a.value]:'(no answer)';
+  if(q.type==='sort') return SORT.map((it,i)=>`${it[0]}: ${(a.value||{})[i]||'(blank)'}`).join('\n');
+  if(q.type==='enc') return S.set.enc.map((c,i)=>`Sample ${i+1}: ${c||'(blank)'}`).join('   ');
+  return (a.value!=null&&a.value!=='')?String(a.value):'(no answer)';
+}
+
+/* ---------- question rendering ---------- */
+function feedback(el,a,q){
+  const fb=el.querySelector('.fb'); if(!fb) return;
+  if(!a.tries){fb.textContent='';fb.className='fb';return;}
+  if(a.correct){fb.className='fb ok';fb.textContent='Correct. '+(q.explain||'');}
+  else{fb.className='fb no';fb.textContent='Not quite. '+(q.hint||'Look back at the demo and try again.');}
+}
+function renderMC(el,id,q){
+  el.innerHTML=`<p class="prompt">${esc(q.prompt)}</p><div class="opts" role="group" aria-label="${esc(q.prompt)}"></div><div class="qrow"><button class="btn" type="button">Check</button><span class="fb" aria-live="polite"></span></div>`;
+  const box=el.querySelector('.opts'), a=A(id);
+  const paint=()=>{[...box.children].forEach((b,i)=>{b.setAttribute('aria-pressed',a.value===i);b.classList.toggle('right',!!a.correct&&i===q.answer);b.disabled=!!a.correct;}); el.querySelector('.btn').disabled=!!a.correct;};
+  q.options.forEach((o,i)=>{const b=document.createElement('button');b.type='button';b.className='opt';b.textContent=o;b.onclick=()=>{a.value=i;paint();save();};box.appendChild(b);});
+  el.querySelector('.btn').onclick=()=>{
+    if(a.value==null){const fb=el.querySelector('.fb');fb.className='fb no';fb.textContent='Choose an answer first.';return;}
+    a.tries=(a.tries||0)+1; a.correct=a.value===q.answer; paint(); feedback(el,a,q); save();
+  };
+  paint(); feedback(el,a,q);
+}
+function renderNum(el,id,q){
+  el.innerHTML=`<p class="prompt">${esc(q.prompt)}</p><div class="numwrap"><input type="text" inputmode="decimal" aria-label="${esc(q.prompt)}"><span class="muted">${esc(q.unit||'')}</span></div><div class="qrow"><button class="btn" type="button">Check</button><span class="fb" aria-live="polite"></span></div>`;
+  const inp=el.querySelector('input'), a=A(id);
+  inp.value=a.value||'';
+  const lock=()=>{inp.disabled=!!a.correct;el.querySelector('.btn').disabled=!!a.correct;};
+  inp.oninput=()=>{a.value=inp.value;save();};
+  const go=()=>{
+    const v=parseNum(inp.value);
+    if(v==null){const fb=el.querySelector('.fb');fb.className='fb no';fb.textContent='Type a number first.';return;}
+    a.tries=(a.tries||0)+1; a.correct=!!q.check(v); lock(); feedback(el,a,q); save();
+  };
+  el.querySelector('.btn').onclick=go; inp.onkeydown=e=>{if(e.key==='Enter')go();};
+  lock(); feedback(el,a,q);
+}
+function renderCell(el,id,q){
+  el.innerHTML=`<b>${esc(q.label)}</b><input type="text" inputmode="numeric" aria-label="Levels for ${esc(q.label)}"><div class="fb small" aria-live="polite"></div>`;
+  const inp=el.querySelector('input'), a=A(id), fb=el.querySelector('.fb');
+  inp.value=a.value||'';
+  const paint=()=>{ if(!a.tries){fb.textContent='';return;} fb.className='fb small '+(a.correct?'ok':'no'); fb.textContent=a.correct?q.explain:'Try again: 2 to that power'; inp.disabled=!!a.correct; };
+  inp.oninput=()=>{a.value=inp.value;save();};
+  inp.onchange=()=>{const v=parseNum(inp.value); if(v==null) return; a.tries=(a.tries||0)+1; a.correct=!!q.check(v); paint(); save();};
+  inp.onkeydown=e=>{if(e.key==='Enter') inp.onchange();};
+  paint();
+}
+function renderFR(el,id,q){
+  el.innerHTML=`<p class="prompt">${esc(q.prompt)}</p><textarea aria-label="${esc(q.prompt)}" placeholder="Type your answer"></textarea>`;
+  const t=el.querySelector('textarea'), a=A(id); t.value=a.value||'';
+  t.oninput=()=>{a.value=t.value;save();};
+}
+function renderSelect(el,id,q){
+  el.innerHTML=`<p class="prompt">${esc(q.prompt)}</p><select aria-label="${esc(q.prompt)}" style="max-width:280px"><option value="">Choose…</option>${q.options.map(o=>`<option>${esc(o)}</option>`).join('')}</select>`;
+  const s=el.querySelector('select'), a=A(id); s.value=a.value||'';
+  s.onchange=()=>{a.value=s.value;save();};
+}
+document.querySelectorAll('[data-q]').forEach(el=>{
+  const id=el.dataset.q, q=Q[id];
+  ({mc:renderMC,num:renderNum,cell:renderCell,fr:renderFR,select:renderSelect})[q.type](el,id,q);
+});
+
+/* sort */
+(function(){
+  const root=$('#sortq'), a=A('sort'); a.value=a.value||{};
+  root.innerHTML=`<div class="sort"></div><div class="qrow"><button class="btn" type="button">Check my sorting</button><span class="fb" aria-live="polite"></span></div>`;
+  const list=root.querySelector('.sort'), fb=root.querySelector('.fb');
+  const paint=()=>{
+    [...list.children].forEach((row,i)=>{
+      row.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',a.value[i]===b.dataset.v));
+      row.classList.remove('ok','no');
+      if(a.tries&&a.value[i]) row.classList.add(a.value[i]===SORT[i][1]?'ok':'no');
+    });
+    if(a.tries){ fb.className='fb '+(a.correct?'ok':'no'); fb.textContent=a.correct?'All 8 correct. Anything stored as a list of values is digital; anything that varies smoothly in the physical world is analog.':`${a.score} of 8 correct. Rows outlined in red need another look.`; }
+  };
+  SORT.forEach((it,i)=>{
+    const row=document.createElement('div'); row.className='row';
+    row.innerHTML=`<span class="t">${esc(it[0])}</span><span class="seg" role="group" aria-label="${esc(it[0])}"><button type="button" data-v="analog">Analog</button><button type="button" data-v="digital">Digital</button></span>`;
+    row.querySelectorAll('button').forEach(b=>b.onclick=()=>{a.value[i]=b.dataset.v;paint();save();});
+    list.appendChild(row);
+  });
+  root.querySelector('.btn').onclick=()=>{
+    const n=Object.keys(a.value).length;
+    if(n<SORT.length){fb.className='fb no';fb.textContent=`Sort all 8 first (${n} done).`;return;}
+    a.tries=(a.tries||0)+1; a.score=SORT.filter((it,i)=>a.value[i]===it[1]).length; a.correct=a.score===SORT.length; paint(); save();
+  };
+  paint();
+})();
+
+/* ---------- drawing helpers ---------- */
+const LIGHT={ink:'#18233D',soft:'#4A5878',grid:'#DCE5F0',rule:'#C3CFDF',analog:'#C98200',sample:'#E0473A',quant:'#6A3FB5',ok:'#1F7A4D',bad:'#B42318',surface:'#FFFFFF'};
+function cssPal(){const cs=getComputedStyle(document.documentElement);const g=n=>cs.getPropertyValue(n).trim();return{ink:g('--ink'),soft:g('--ink-soft'),grid:g('--grid'),rule:g('--rule'),analog:g('--analog'),sample:g('--sample'),quant:g('--quant'),ok:g('--ok'),bad:g('--bad'),surface:g('--surface')};}
+function setup(c){
+  const r=c.getBoundingClientRect(); const w=Math.max(260,r.width), h=r.height||200, d=window.devicePixelRatio||1;
+  c.width=Math.round(w*d); c.height=Math.round(h*d);
+  const x=c.getContext('2d'); x.setTransform(d,0,0,d,0,0); x.clearRect(0,0,w,h); return {x,w,h};
+}
+function offscreen(w,h){const c=document.createElement('canvas');c.width=w*2;c.height=h*2;const x=c.getContext('2d');x.setTransform(2,0,0,2,0,0);return {c,x,w,h};}
+function catmull(x,pts){
+  if(pts.length<2) return; x.beginPath(); x.moveTo(pts[0][0],pts[0][1]);
+  for(let i=0;i<pts.length-1;i++){
+    const p0=pts[Math.max(i-1,0)],p1=pts[i],p2=pts[i+1],p3=pts[Math.min(i+2,pts.length-1)];
+    x.bezierCurveTo(p1[0]+(p2[0]-p0[0])/6,p1[1]+(p2[1]-p0[1])/6,p2[0]-(p3[0]-p1[0])/6,p2[1]-(p3[1]-p1[1])/6,p2[0],p2[1]);
+  }
+  x.stroke();
+}
+function dot(x,cx,cy,r,fill){x.beginPath();x.arc(cx,cy,r,0,Math.PI*2);x.fillStyle=fill;x.fill();}
+function line(x,a,b,c,d,col,wid){x.beginPath();x.moveTo(a,b);x.lineTo(c,d);x.strokeStyle=col;x.lineWidth=wid;x.stroke();}
+const MONO='12px "JetBrains Mono", ui-monospace, Menlo, monospace';
+
+/* signal: 330 ms, highest component 10 cycles / 330 ms ≈ 30 Hz */
+const SIG=(()=>{const f=t=>0.62*Math.sin(2*Math.PI*2*t/330+0.15)+0.38*Math.sin(2*Math.PI*5*t/330+1.1)+0.2*Math.sin(2*Math.PI*10*t/330+2.3);let m=0;for(let t=0;t<=330;t+=0.25)m=Math.max(m,Math.abs(f(t)));return t=>f(t)/m*95;})();
+const SIG_HZ=10/0.33;
+
+/* ---------- hero ---------- */
+const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+let heroP=reduce?1:0;
+function drawHero(){
+  const c=$('#hero'); const {x,w,h}=setup(c); const P=cssPal();
+  const amp=h*0.33, mid=h*0.46; const X=t=>t/330*w, Y=v=>mid-v/100*amp;
+  const b1=w*0.36,b2=w*0.68;
+  x.save(); x.beginPath(); x.rect(0,0,w*heroP,h); x.clip();
+  x.globalAlpha=0.22; x.strokeStyle=P.analog; x.lineWidth=2; x.beginPath();
+  for(let t=0;t<=330;t+=0.5){const px=X(t),py=Y(SIG(t)); t?x.lineTo(px,py):x.moveTo(px,py);} x.stroke(); x.globalAlpha=1;
+  x.strokeStyle=P.analog; x.lineWidth=3.5; x.lineCap='round'; x.beginPath();
+  for(let t=0;X(t)<=b1;t+=0.5){const px=X(t),py=Y(SIG(t)); t?x.lineTo(px,py):x.moveTo(px,py);} x.stroke();
+  const step=Math.max(10,330*40/w), qz=v=>{const i=Math.round((v+100)/200*7);return {i,v:-100+i*200/7};};
+  let prev=null;
+  for(let t=Math.ceil((b1/w*330)/step)*step;t<=330;t+=step){
+    const px=X(t),v=SIG(t),q=qz(v);
+    if(px<=b2){
+      line(x,px,mid,px,Y(v),P.sample,1.5); dot(x,px,Y(v),4,P.sample);
+      x.strokeStyle=P.quant; x.lineWidth=3; x.beginPath();
+      if(prev){x.moveTo(prev[0],prev[1]);x.lineTo(px,prev[1]);x.lineTo(px,Y(q.v));} x.stroke();
+      x.beginPath(); x.moveTo(px,Y(q.v)); x.lineTo(Math.min(px+X(step),b2),Y(q.v)); x.stroke();
+      prev=[Math.min(px+X(step),b2),Y(q.v)];
+    } else {
+      x.fillStyle=P.ink; x.font='700 13px "JetBrains Mono", ui-monospace, monospace'; x.textAlign='center';
+      x.fillText(q.i.toString(2).padStart(3,'0'),px,Y(q.v)+4);
+    }
+  }
+  x.restore();
+  x.fillStyle=P.soft; x.font='14px "Atkinson Hyperlegible", system-ui, sans-serif'; x.textAlign='left';
+  const lab=[['analog',4],['sampled and rounded',b1+4],['encoded',b2+4]];
+  lab.forEach(([s,px])=>{ if(px<w*heroP) x.fillText(s,px,h-6); });
+}
+function animateHero(){
+  if(reduce){drawHero();return;}
+  const t0=performance.now();
+  const f=now=>{const p=Math.min(1,(now-t0)/1800); heroP=1-Math.pow(1-p,3); drawHero(); if(p<1) requestAnimationFrame(f);};
+  requestAnimationFrame(f);
+}
+
+/* ---------- sampling ---------- */
+function drawSamp(x,w,h,P,interval,recon){
+  const L=44,R=16,T=14,B=28; const X=t=>L+t/330*(w-L-R), Y=v=>T+(1-(v+125)/250)*(h-T-B);
+  x.fillStyle=P.surface; x.fillRect(0,0,w,h);
+  const ts=[]; for(let t=0;t<=330+1e-9;t+=interval) ts.push(t);
+  ts.forEach(t=>line(x,X(t),T,X(t),h-B,P.grid,1));
+  line(x,L,Y(0),w-R,Y(0),P.soft,1.2); line(x,L,T,L,h-B,P.soft,1.2);
+  x.fillStyle=P.soft; x.font=MONO; x.textAlign='right';
+  [[100,'100'],[0,'0'],[-100,'−100']].forEach(([v,s])=>x.fillText(s,L-6,Y(v)+4));
+  x.textAlign='center'; x.fillText('330 ms',w-R-22,h-8); x.fillText('0',L,h-8);
+  x.strokeStyle=P.analog; x.lineWidth=2.5; x.beginPath();
+  for(let t=0;t<=330;t+=0.5){const px=X(t),py=Y(SIG(t)); t?x.lineTo(px,py):x.moveTo(px,py);} x.stroke();
+  if(recon&&ts.length>1){x.setLineDash([6,5]); x.strokeStyle=P.ink; x.lineWidth=2; catmull(x,ts.map(t=>[X(t),Y(SIG(t))])); x.setLineDash([]);}
+  ts.forEach(t=>{line(x,X(t),Y(0),X(t),Y(SIG(t)),P.sample,1.5); dot(x,X(t),Y(SIG(t)),4,P.sample);});
+  return ts.length;
+}
+function updSamp(){
+  const iv=S.set.interval; $('#intervalVal').textContent=iv+' ms'; $('#interval').value=iv; $('#recon').checked=S.set.recon;
+  const {x,w,h}=setup($('#cvSamp')); const n=drawSamp(x,w,h,cssPal(),iv,S.set.recon);
+  const rate=1000/iv, ok=rate>2*SIG_HZ;
+  $('#sampReadout').innerHTML=`<span class="chip">${n} samples</span><span class="chip">${(Math.round(rate*10)/10)} samples per second</span><span class="chip">Fastest wiggle ≈ 30 Hz</span><span class="chip ${ok?'ok':'bad'}">${ok?'Faster than 2 × 30 Hz: enough':'Slower than 2 × 30 Hz: detail lost'}</span>`;
+}
+$('#interval').oninput=e=>{S.set.interval=+e.target.value;updSamp();save();};
+$('#recon').onchange=e=>{S.set.recon=e.target.checked;updSamp();save();};
+
+/* ---------- aliasing ---------- */
+const AF=5, APH=0.6;
+function drawAlias(x,w,h,P,fs){
+  const L=16,R=16,T=12,B=22; const X=t=>L+t*(w-L-R), Y=v=>T+(1-(v+1.25)/2.5)*(h-T-B);
+  x.fillStyle=P.surface; x.fillRect(0,0,w,h);
+  const ts=[]; for(let n=0;n/fs<=1+1e-9;n++) ts.push(n/fs);
+  ts.forEach(t=>line(x,X(t),T,X(t),h-B,P.grid,1));
+  line(x,L,Y(0),w-R,Y(0),P.soft,1);
+  x.strokeStyle=P.analog; x.lineWidth=2; x.beginPath();
+  for(let i=0;i<=1000;i++){const t=i/1000,px=X(t),py=Y(Math.sin(2*Math.PI*AF*t+APH)); i?x.lineTo(px,py):x.moveTo(px,py);} x.stroke();
+  const fa=AF-Math.round(AF/fs)*fs;
+  x.setLineDash([6,5]); x.strokeStyle=P.ink; x.lineWidth=2.2; x.beginPath();
+  for(let i=0;i<=1000;i++){const t=i/1000,px=X(t),py=Y(Math.sin(2*Math.PI*fa*t+APH)); i?x.lineTo(px,py):x.moveTo(px,py);} x.stroke(); x.setLineDash([]);
+  ts.forEach(t=>dot(x,X(t),Y(Math.sin(2*Math.PI*AF*t+APH)),4.5,P.sample));
+  x.fillStyle=P.soft; x.font=MONO; x.textAlign='left'; x.fillText('1 second',w-R-62,h-6);
+  return Math.abs(fa);
+}
+function updAlias(){
+  const fs=S.set.arate; $('#arate').value=fs; $('#arateVal').textContent=fs+' / sec';
+  const {x,w,h}=setup($('#cvAlias')); const fa=drawAlias(x,w,h,cssPal(),fs);
+  const st=fs>2*AF?['ok','More than 2 × 5 Hz: no aliasing']:fs===2*AF?['bad','Exactly 2 × 5 Hz: not enough']:['bad','Less than 2 × 5 Hz: aliasing'];
+  $('#aliasReadout').innerHTML=`<span class="chip">Real signal: 5 Hz</span><span class="chip">Computer sees: ${Math.round(fa*100)/100} Hz</span><span class="chip ${st[0]}">${st[1]}</span>`;
+}
+$('#arate').oninput=e=>{S.set.arate=+e.target.value;updAlias();save();};
+
+/* ---------- quantization ---------- */
+function quantStats(bits,gain){
+  const Lv=2**bits, g=gain/100, out=[]; let err=0, clip=0;
+  for(let t=0;t<=330;t+=15){
+    const raw=SIG(t)*g, c=Math.max(-100,Math.min(100,raw)); if(c!==raw) clip++;
+    const qi=Math.round((c+100)/200*(Lv-1)), q=-100+qi*200/(Lv-1);
+    err+=Math.abs(raw-q); out.push({t,raw,q,clipped:c!==raw});
+  }
+  return {Lv,pts:out,avg:err/out.length,clip};
+}
+function drawQuant(x,w,h,P,bits,gain){
+  const L=44,R=16,T=12,B=26, RANGE=165; const X=t=>L+t/330*(w-L-R), Y=v=>T+(1-(v+RANGE)/(2*RANGE))*(h-T-B);
+  x.fillStyle=P.surface; x.fillRect(0,0,w,h);
+  const st=quantStats(bits,gain);
+  x.globalAlpha=0.09; x.fillStyle=P.bad; x.fillRect(L,T,w-L-R,Y(100)-T); x.fillRect(L,Y(-100),w-L-R,h-B-Y(-100)); x.globalAlpha=1;
+  if(st.Lv<=32){ x.globalAlpha=0.35; for(let i=0;i<st.Lv;i++){const v=-100+i*200/(st.Lv-1); line(x,L,Y(v),w-R,Y(v),P.quant,1);} x.globalAlpha=1; }
+  line(x,L,Y(0),w-R,Y(0),P.soft,1); line(x,L,T,L,h-B,P.soft,1.2);
+  x.fillStyle=P.soft; x.font=MONO; x.textAlign='right';
+  [[100,'100'],[0,'0'],[-100,'−100']].forEach(([v,s])=>x.fillText(s,L-6,Y(v)+4));
+  x.textAlign='left'; x.fillText('out of range',L+6,T+13);
+  const g=gain/100; x.strokeStyle=P.analog; x.lineWidth=2.2; x.beginPath();
+  for(let t=0;t<=330;t+=0.5){const px=X(t),py=Y(SIG(t)*g); t?x.lineTo(px,py):x.moveTo(px,py);} x.stroke();
+  st.pts.forEach(p=>{
+    line(x,X(p.t),Y(0),X(p.t),Y(p.q),P.quant,1.3);
+    x.globalAlpha=.85; line(x,X(p.t)+3,Y(p.raw),X(p.t)+3,Y(p.q),P.sample,2.5); x.globalAlpha=1;
+    dot(x,X(p.t),Y(p.q),4.5,P.quant);
+    if(p.clipped){x.beginPath();x.arc(X(p.t),Y(p.q),8,0,Math.PI*2);x.strokeStyle=P.bad;x.lineWidth=1.5;x.stroke();}
+  });
+  return st;
+}
+function updQuant(){
+  const b=S.set.bits,g=S.set.gain; $('#bits').value=b; $('#gain').value=g; $('#bitsVal').textContent=b+(b===1?' bit':' bits'); $('#gainVal').textContent=g+'%';
+  const {x,w,h}=setup($('#cvQuant')); const st=drawQuant(x,w,h,cssPal(),b,g);
+  $('#quantReadout').innerHTML=`<span class="chip">2<sup>${b}</sup> = ${st.Lv} levels</span><span class="chip">Average error: ${st.avg.toFixed(1)} V</span><span class="chip ${st.clip?'bad':''}">Clipped samples: ${st.clip}</span>`;
+}
+$('#bits').oninput=e=>{S.set.bits=+e.target.value;updQuant();save();};
+$('#gain').oninput=e=>{S.set.gain=+e.target.value;updQuant();save();};
+
+/* ---------- encoding ---------- */
+const ENC=[3,6,7,5,2,0,1,4];
+function drawEnc(x,w,h,P){
+  const L=40,R=16,T=16,B=30; const X=i=>L+(i+0.5)*(w-L-R)/8, Y=v=>T+(1-v/7)*(h-T-B);
+  x.fillStyle=P.surface; x.fillRect(0,0,w,h);
+  x.font=MONO;
+  for(let v=0;v<8;v++){ line(x,L,Y(v),w-R,Y(v),P.grid,1); x.fillStyle=P.soft; x.textAlign='right'; x.fillText(String(v),L-10,Y(v)+4); }
+  x.save(); x.translate(12,(T+h-B)/2); x.rotate(-Math.PI/2); x.textAlign='center'; x.fillStyle=P.soft; x.fillText('level',0,0); x.restore();
+  x.globalAlpha=.5; x.strokeStyle=P.analog; x.lineWidth=2; catmull(x,ENC.map((v,i)=>[X(i),Y(v)])); x.globalAlpha=1;
+  ENC.forEach((v,i)=>{ line(x,X(i),Y(0),X(i),Y(v),P.quant,1.5); dot(x,X(i),Y(v),5,P.quant);
+    x.fillStyle=P.soft; x.textAlign='center'; x.fillText('#'+(i+1),X(i),h-10);
+    const c=S.set.enc[i]; if(/^[01]{3}$/.test(c)){ x.fillStyle=P.ink; x.font='700 12px "JetBrains Mono", monospace'; x.fillText(c,X(i),Y(v)-11); x.font=MONO; }
+  });
+}
+function updEnc(){ const {x,w,h}=setup($('#cvEnc')); drawEnc(x,w,h,cssPal()); }
+(function(){
+  const box=$('#encInputs'), a=A('enc');
+  ENC.forEach((v,i)=>{ const l=document.createElement('label'); l.innerHTML=`Sample ${i+1}<input type="text" inputmode="numeric" maxlength="3" autocomplete="off">`; const inp=l.querySelector('input'); inp.value=S.set.enc[i]||''; inp.oninput=()=>{inp.value=inp.value.replace(/[^01]/g,''); S.set.enc[i]=inp.value; inp.classList.remove('ok','no'); updEnc(); save();}; box.appendChild(l); });
+  const paint=()=>{
+    const ins=box.querySelectorAll('input');
+    if(a.tries) ins.forEach((inp,i)=>{inp.classList.remove('ok','no'); inp.classList.add(inp.value===ENC[i].toString(2).padStart(3,'0')?'ok':'no'); inp.disabled=!!a.correct;});
+    const fb=$('#encFb');
+    if(a.tries){ fb.className='fb '+(a.correct?'ok':'no'); fb.textContent=a.correct?'Correct. Each level number is stored as a 3-bit binary number.':`${a.score} of 8 correct. Remember the places are 4, 2, 1.`; }
+    $('#encCheck').disabled=!!a.correct;
+    $('#bitstreamWrap').hidden=!a.correct;
+    $('#bitstream').innerHTML=ENC.map(v=>`<span class="grp">${v.toString(2).padStart(3,'0')}</span>`).join(' ');
+  };
+  $('#encCheck').onclick=()=>{
+    const n=S.set.enc.filter(c=>c&&c.length===3).length;
+    if(n<8){const fb=$('#encFb');fb.className='fb no';fb.textContent=`Fill in all 8 samples with 3 digits each (${n} done).`;return;}
+    a.tries=(a.tries||0)+1; a.score=ENC.filter((v,i)=>S.set.enc[i]===v.toString(2).padStart(3,'0')).length; a.correct=a.score===8; paint(); save();
+  };
+  paint();
+})();
+
+/* ---------- audio ---------- */
+const NOTES=[[523.25,.4],[523.25,.4],[783.99,.4],[783.99,.4],[880,.4],[880,.4],[783.99,.8]];
+let AC=null, cur=null, src=null, srcRate=0;
+function genClip(sr){
+  const N=Math.floor(sr*3.2), out=new Float32Array(N); let t0=0;
+  NOTES.forEach(([f,d])=>{
+    const start=Math.floor(t0*sr), len=Math.floor(d*sr);
+    for(let i=0;i<len&&start+i<N;i++){
+      const t=i/sr; let env=Math.min(1,t/0.008)*Math.exp(-2.6*t/d); const rel=(len-i)/sr; if(rel<0.02) env*=rel/0.02;
+      let s=0; for(let k=1;k<=10;k++){ if(f*k<sr/2) s+=Math.sin(2*Math.PI*f*k*t)/k; }
+      out[start+i]+=s*env;
+    }
+    t0+=d;
+  });
+  let m=0; for(let i=0;i<N;i++) m=Math.max(m,Math.abs(out[i])); for(let i=0;i<N;i++) out[i]=out[i]/m*0.9;
+  return out;
+}
+function digitize(data,sr,rate,bits){
+  const out=new Float32Array(data.length), hold=sr/rate, Lv=2**bits;
+  for(let i=0;i<data.length;i++){
+    const j=hold>1?Math.min(data.length-1,Math.floor(Math.floor(i/hold)*hold)):i;
+    let v=data[j]; const qi=Math.round((v+1)/2*(Lv-1)); out[i]=qi/(Lv-1)*2-1;
+  }
+  return out;
+}
+function getSrc(sr){ if(!src||srcRate!==sr){ srcRate=sr; src=genClip(sr);} return src; }
+function ensureAudio(){
+  if(!AC){ const C=window.AudioContext||window.webkitAudioContext; if(!C) return null; AC=new C(); }
+  if(AC.state==='suspended') AC.resume();
+  return AC;
+}
+function play(data){
+  const ac=ensureAudio(); if(!ac){ $('#audReadout').insertAdjacentHTML('beforeend','<span class="chip bad">Audio isn’t supported in this browser</span>'); return; }
+  stop();
+  const buf=ac.createBuffer(1,data.length,ac.sampleRate); buf.copyToChannel(data,0);
+  const s=ac.createBufferSource(), g=ac.createGain(); g.gain.value=0.3; s.buffer=buf; s.connect(g); g.connect(ac.destination); s.start(); cur=s;
+}
+function stop(){ if(cur){ try{cur.stop();}catch(e){} cur=null; } }
+$('#playDig').onclick=()=>{ const ac=ensureAudio(); if(!ac) return play(null); const d=getSrc(ac.sampleRate); play(digitize(d,ac.sampleRate,+S.set.arRate,+S.set.arBits)); };
+$('#playOrig').onclick=()=>{ const ac=ensureAudio(); if(!ac) return play(null); play(getSrc(ac.sampleRate)); };
+$('#stopAud').onclick=stop;
+function updAudio(){
+  $('#arRate').value=S.set.arRate; $('#arBits').value=S.set.arBits;
+  const sr=AC?AC.sampleRate:48000, d=getSrc(sr), rate=+S.set.arRate, bits=+S.set.arBits;
+  const start=Math.floor(sr*1.66), len=Math.floor(sr*0.006);
+  const seg=d.subarray(start-Math.floor(sr*0.02),start+len); // context for sample-and-hold alignment
+  const dig=digitize(seg,sr,rate,bits), off=Math.floor(sr*0.02);
+  const {x,w,h}=setup($('#cvAudio')); const P=cssPal();
+  const L=12,R=12,T=10,B=10, X=i=>L+i/len*(w-L-R), Y=v=>T+(1-(v+1.05)/2.1)*(h-T-B);
+  x.fillStyle=P.surface; x.fillRect(0,0,w,h); line(x,L,Y(0),w-R,Y(0),P.grid,1);
+  x.strokeStyle=P.analog; x.lineWidth=2; x.beginPath(); for(let i=0;i<len;i++){ i?x.lineTo(X(i),Y(seg[off+i])):x.moveTo(X(i),Y(seg[off+i])); } x.stroke();
+  x.strokeStyle=P.quant; x.lineWidth=2; x.beginPath(); let py=Y(dig[off]); x.moveTo(X(0),py);
+  for(let i=1;i<len;i++){ const ny=Y(dig[off+i]); if(ny!==py){ x.lineTo(X(i),py); x.lineTo(X(i),ny); py=ny; } } x.lineTo(X(len),py); x.stroke();
+  const bytes=rate*bits*3.2/8;
+  $('#audReadout').innerHTML=`<span class="chip">${fmt(rate)} samples/sec × ${bits} bits × 3.2 sec</span><span class="chip">= ${fmt(Math.round(bytes/100)/10)} KB for this clip</span>`;
+}
+$('#arRate').onchange=e=>{S.set.arRate=e.target.value;updAudio();save();};
+$('#arBits').onchange=e=>{S.set.arBits=e.target.value;updAudio();save();};
+
+/* ---------- calculator ---------- */
+function updCalc(){
+  const r=+$('#cRate').value||0,b=+$('#cBits').value,c=+$('#cCh').value,s=+$('#cSec').value||0;
+  const bits=r*b*c*s, bytes=bits/8;
+  $('#cOut').textContent=`${(bytes/1e6).toLocaleString('en-US',{maximumFractionDigits:2})} MB`;
+  $('#cOut2').textContent=`${fmt(r)} × ${b} × ${c} × ${fmt(s)} = ${fmt(bits)} bits = ${fmt(bytes)} bytes`;
+}
+['#cRate','#cBits','#cCh','#cSec'].forEach(s=>$(s).addEventListener('input',updCalc));
+document.querySelectorAll('[data-preset]').forEach(b=>b.onclick=()=>{const [r,bt,ch]=b.dataset.preset.split(',');$('#cRate').value=r;$('#cBits').value=bt;$('#cCh').value=ch;updCalc();});
+
+/* ---------- identity + progress ---------- */
+const nameEl=$('#name'), perEl=$('#period');
+nameEl.value=S.name; perEl.value=S.period;
+nameEl.oninput=()=>{S.name=nameEl.value;save();};
+perEl.oninput=()=>{S.period=perEl.value;save();};
+function secDone(i){ return ORDER.filter(id=>Q[id].sec===i).every(isDone); }
+function scoreInfo(){ const auto=ORDER.filter(id=>Q[id].auto); return {n:auto.filter(id=>(S.ans[id]||{}).correct).length,total:auto.length}; }
+function updateProgress(){
+  $('#who').textContent=S.name.trim()?`${S.name.trim()}${S.period.trim()?' · Period '+S.period.trim():''}`:'Converting analog data to binary';
+  document.querySelectorAll('.progress a[data-sec]').forEach(a=>a.classList.toggle('done',secDone(+a.dataset.sec)));
+  $('#checklist').innerHTML=SECTIONS.map((s,i)=>`<li class="${secDone(i)?'done':''}"><span class="mark">${secDone(i)?'✓':i+1}</span>${esc(s)}${secDone(i)?'':' <span class="muted small">(not finished)</span>'}</li>`).join('');
+  const sc=scoreInfo(); $('#scoreLine').textContent=`Auto-checked questions correct: ${sc.n} of ${sc.total}.`;
+}
+
+/* ---------- recap ---------- */
+const KEY_IDEAS=[
+  'Analog data changes smoothly and has infinite detail. Digital data is a finite set of separate values stored in binary, so a digital copy of analog data is always an approximation.',
+  'Sampling measures the signal at regular time intervals. Sampling rate = samples per second = 1 ÷ sampling interval. Sample at more than twice the highest frequency (Nyquist) or aliasing makes fast signals look like slow ones.',
+  'Quantization rounds each sample to the nearest of a fixed set of levels. n bits per sample (the bit depth) give 2^n levels. More bits means less quantization error. Values outside the range are clipped.',
+  'Binary encoding stores each sample’s level number as an n-bit binary number. The file must also record the sampling rate and bit depth so the bits can be decoded.',
+  'Higher sampling rate and bit depth give a closer match to the original but take more storage: bits = sampling rate × bit depth × channels × seconds.'
+];
+function snap(kind){
+  if(kind==='samp'){const o=offscreen(720,260); drawSamp(o.x,o.w,o.h,LIGHT,S.set.interval,true); return o.c.toDataURL('image/png');}
+  if(kind==='alias'){const o=offscreen(720,190); drawAlias(o.x,o.w,o.h,LIGHT,S.set.arate); return o.c.toDataURL('image/png');}
+  if(kind==='quant'){const o=offscreen(720,260); drawQuant(o.x,o.w,o.h,LIGHT,S.set.bits,S.set.gain); return o.c.toDataURL('image/png');}
+}
+function qa(id){ return {type:'qa',p:Q[id].type==='cell'?`Levels for ${Q[id].label}`:Q[id].prompt,a:answerText(id),r:resultText(id)}; }
+function buildBlocks(){
+  const B=[], sec=i=>ORDER.filter(id=>Q[id].sec===i);
+  B.push({type:'ideas'});
+  SECTIONS.forEach((title,i)=>{
+    B.push({type:'h',t:`${i+1}. ${title}`});
+    if(i===1){ B.push({type:'img',src:snap('samp'),cap:`Your sampling demo: interval ${S.set.interval} ms (${Math.round(10000/S.set.interval)/10} samples per second).`}); }
+    if(i===2){ B.push({type:'img',src:snap('quant'),cap:`Your quantization demo: ${S.set.bits}-bit (${2**S.set.bits} levels), input level ${S.set.gain}%.`}); }
+    sec(i).forEach(id=>{
+      B.push(qa(id));
+      if(id==='samp_mc') B.push({type:'img',src:snap('alias'),cap:`Your aliasing demo: 5 Hz signal sampled ${S.set.arate} times per second.`});
+    });
+  });
+  return B;
+}
+function renderRecap(B){
+  const sc=scoreInfo(), d=new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+  let h=`<h4>Converting analog data to binary</h4><div>${esc(S.name.trim()||'(name missing)')}${S.period.trim()?' · Period '+esc(S.period.trim()):''} · ${d}</div><div class="cap">Auto-checked questions correct: ${sc.n} of ${sc.total}</div>`;
+  B.forEach(b=>{
+    if(b.type==='ideas') h+=`<h5>Key ideas</h5><ul>${KEY_IDEAS.map(k=>`<li>${esc(k)}</li>`).join('')}</ul>`;
+    else if(b.type==='h') h+=`<h5>${esc(b.t)}</h5>`;
+    else if(b.type==='img') h+=`<img src="${b.src}" alt=""><div class="cap">${esc(b.cap)}</div>`;
+    else h+=`<div class="qa"><div class="p">${esc(b.p)}</div><div class="a">${esc(b.a)}</div>${b.r?`<div class="r">${esc(b.r)}</div>`:''}</div>`;
+  });
+  $('#recap').innerHTML=h;
+}
+const clean=s=>String(s).replace(/[’‘]/g,"'").replace(/[“”]/g,'"').replace(/[–—]/g,'-').replace(/−/g,'-').replace(/×/g,'x').replace(/÷/g,'/').replace(/…/g,'...').replace(/≈/g,'~').replace(/·/g,'-').replace(/²/g,'^2').replace(/⁸/g,'^8').replace(/¹²/g,'^12').replace(/¹⁶/g,'^16').replace(/[^\x09\x0A\x0D\x20-\x7E\xA0-\xFF]/g,'');
+function buildPDF(B){
+  const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:'pt',format:'letter'});
+  const W=612,H=792,M=54,CW=W-2*M; let y=M;
+  const need=hh=>{ if(y+hh>H-M){ doc.addPage(); y=M; } };
+  const txt=(s,{size=10.5,bold=false,color=[24,35,61],indent=0,gap=3}={})=>{
+    doc.setFont('helvetica',bold?'bold':'normal'); doc.setFontSize(size); doc.setTextColor(...color);
+    const lh=size*1.38;
+    clean(s).split('\n').forEach(par=>{ doc.splitTextToSize(par||' ',CW-indent).forEach(ln=>{ need(lh); doc.text(ln,M+indent,y+size); y+=lh; }); });
+    y+=gap;
+  };
+  const rule=()=>{ need(10); doc.setDrawColor(195,207,223); doc.setLineWidth(.8); doc.line(M,y+4,W-M,y+4); y+=12; };
+  const sc=scoreInfo(), d=new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+  txt('Converting analog data to binary',{size:20,bold:true,gap:2});
+  txt(`${S.name.trim()}${S.period.trim()?'   |   Period '+S.period.trim():''}   |   ${d}`,{size:11,gap:1});
+  txt(`Auto-checked questions correct: ${sc.n} of ${sc.total}`,{size:10,color:[74,88,120],gap:6});
+  B.forEach(b=>{
+    if(b.type==='ideas'){ rule(); txt('Key ideas',{size:13,bold:true,gap:4}); KEY_IDEAS.forEach(k=>txt('-  '+k,{indent:8,gap:4})); }
+    else if(b.type==='h'){ y+=6; rule(); txt(b.t,{size:13,bold:true,gap:4}); }
+    else if(b.type==='img'){ const iw=CW*0.85, ih=iw*(b.cap.includes('aliasing')?190:260)/720; need(ih+24); doc.addImage(b.src,'PNG',M,y,iw,ih); y+=ih+4; txt(b.cap,{size:9,color:[74,88,120],gap:6}); }
+    else { txt(b.p,{bold:true,gap:1}); txt(b.a,{indent:12,gap:b.r?1:6}); if(b.r) txt(b.r,{indent:12,size:9,color:[74,88,120],gap:6}); }
+  });
+  const n=doc.getNumberOfPages();
+  for(let i=1;i<=n;i++){ doc.setPage(i); doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(120,130,150); doc.text(clean(`${S.name.trim()} - Analog to digital - page ${i} of ${n}`),M,H-28); }
+  return doc;
+}
+const status=s=>{$('#status').textContent=s;};
+const dlCap=(window.claude&&typeof window.claude.use==='function')?window.claude.use('downloads').catch(()=>null):Promise.resolve(null);
+function needName(){ if(S.name.trim()) return false; status('Add your name at the top of the page first.'); nameEl.scrollIntoView({behavior:reduce?'auto':'smooth',block:'center'}); setTimeout(()=>nameEl.focus({preventScroll:true}),400); return true; }
+$('#dlPdf').onclick=async()=>{
+  if(needName()) return;
+  const B=buildBlocks(); renderRecap(B);
+  if(!window.jspdf){ status('The PDF tool didn’t load. Use “Print or save as PDF” instead.'); return; }
+  let doc; try{ doc=buildPDF(B); }catch(e){ status('Something went wrong building the PDF. Use “Print or save as PDF” instead.'); return; }
+  const fname=(S.name.trim().replace(/[^\w\- ]+/g,'').replace(/\s+/g,'_')||'student')+'_Analog_to_Digital.pdf';
+  status('Preparing your PDF…');
+  const dl=await dlCap;
+  if(dl){
+    try{ await dl.save({filename:fname,data:doc.output('blob')}); status('Saved. Upload the PDF to your Canvas assignment.'); return; }
+    catch(e){ const c=e&&e.code; if(c==='declined'){status('Download canceled. Click Download PDF to try again.');return;} if(c==='rate_limited'){status('A save prompt is already open.');return;} }
+  }
+  try{ doc.save(fname); status('Your PDF should be in your downloads. If nothing appeared, use “Print or save as PDF.”'); }
+  catch(e){ status('Downloading isn’t available here. Use “Print or save as PDF” instead.'); }
+};
+$('#printPdf').onclick=async()=>{
+  if(needName()) return;
+  renderRecap(buildBlocks());
+  await Promise.all([...document.querySelectorAll('#recap img')].map(i=>i.decode?i.decode().catch(()=>{}):null));
+  try{ window.print(); status('In the print window, choose “Save as PDF” as the destination.'); }
+  catch(e){ status('Printing isn’t available here. Use Download PDF instead.'); }
+};
+let resetArmed=false;
+$('#reset').onclick=()=>{
+  if(!resetArmed){ resetArmed=true; $('#reset').textContent='Click again to erase everything'; setTimeout(()=>{resetArmed=false;$('#reset').textContent='Erase my answers and start over';},4000); return; }
+  try{localStorage.removeItem(STORE);}catch(e){} location.reload();
+};
+
+/* ---------- init ---------- */
+function drawAll(){ drawHero(); updSamp(); updAlias(); updQuant(); updEnc(); updAudio(); }
+updCalc(); updateProgress(); drawAll(); animateHero();
+if('IntersectionObserver' in window){ new IntersectionObserver(es=>{ if(es.some(e=>e.isIntersecting)) renderRecap(buildBlocks()); },{rootMargin:'200px'}).observe($('#recap-section')); }
+else renderRecap(buildBlocks());
+let rt=null; window.addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(drawAll,120);});
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',drawAll);
+if(document.fonts&&document.fonts.ready) document.fonts.ready.then(drawAll);
+})();
+</script>
+</body>
+</html>
