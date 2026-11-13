@@ -5,6 +5,7 @@ A simple static site for GitHub Pages. No build step: just HTML files.
 ```
 index.html                      class home page
 lessons/analog-to-digital.html  "From wave to bits" lesson
+lessons/lossless-compression.html  "Shrinking files" lesson
 translator.html                 Python ⇄ AP pseudocode translator
 ```
 
