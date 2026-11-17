@@ -1,0 +1,1095 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Good enough: lossy compression</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖼️</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+
+:root{
+  color-scheme: light;
+  --paper:#F4F7FB; --paper-glass:rgba(244,247,251,.86); --surface:#FFFFFF; --chip:#EAF0F7;
+  --ink:#18233D; --ink-soft:#4A5878; --grid:#DCE5F0; --grid-faint:#E7EDF5; --rule:#C3CFDF;
+  --analog:#C98200; --sample:#E0473A; --quant:#6A3FB5; --quant-tint:#EFE8FB;
+  --ok:#1F7A4D; --ok-tint:#E3F4EA; --bad:#B42318; --bad-tint:#FCE9E7; --focus:#2F6FEB;
+  --font-body:"Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display:"Bricolage Grotesque", "Atkinson Hyperlegible", system-ui, sans-serif;
+  --font-mono:"JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --paper:#0E1524; --paper-glass:rgba(14,21,36,.86); --surface:#162036; --chip:#1D2942;
+    --ink:#E7ECF5; --ink-soft:#A7B3C9; --grid:#26355290; --grid-faint:#131C2E; --rule:#33456A;
+    --analog:#F2B33D; --sample:#FF6B5E; --quant:#B08CFF; --quant-tint:#2A2346;
+    --ok:#4CC38A; --ok-tint:#173326; --bad:#FF7A6E; --bad-tint:#3A1C1C; --focus:#7AA7FF;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --paper:#0E1524; --paper-glass:rgba(14,21,36,.86); --surface:#162036; --chip:#1D2942;
+  --ink:#E7ECF5; --ink-soft:#A7B3C9; --grid:#26355290; --grid-faint:#131C2E; --rule:#33456A;
+  --analog:#F2B33D; --sample:#FF6B5E; --quant:#B08CFF; --quant-tint:#2A2346;
+  --ok:#4CC38A; --ok-tint:#173326; --bad:#FF7A6E; --bad-tint:#3A1C1C; --focus:#7AA7FF;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:calc(env(safe-area-inset-top,0px) + 72px); -webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font:17px/1.62 var(--font-body);
+  background-image:linear-gradient(var(--grid-faint) 1px,transparent 1px),linear-gradient(90deg,var(--grid-faint) 1px,transparent 1px);
+  background-size:24px 24px;
+}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--paper-glass);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+img,canvas{max-width:100%}
+
+/* progress bar */
+.progress{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--paper-glass);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-bottom:1px solid var(--rule)}
+.progress .in{max-width:820px;margin:0 auto;padding:10px 20px;display:flex;align-items:center;gap:8px;overflow-x:auto}
+.progress .who{font-weight:700;margin-right:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;font-size:.95rem}
+.progress a{flex:none;display:grid;place-items:center;width:32px;height:32px;border-radius:50%;border:1.5px solid var(--rule);color:var(--ink-soft);text-decoration:none;font:700 .85rem var(--font-mono);background:var(--surface)}
+.progress a.done{background:var(--ok);border-color:var(--ok);color:var(--surface)}
+.progress a.recap-link{width:auto;border-radius:16px;padding:0 12px;font-family:var(--font-body)}
+
+/* hero */
+.hero{max-width:1040px;margin:0 auto;padding:36px 20px 8px}
+.hero-text{max-width:720px;margin:0 auto}
+#recap:empty{display:none}
+.home-link{display:inline-block;margin-bottom:8px;color:var(--ink-soft);font-weight:700;font-size:.95rem}
+.hero canvas{display:block;width:100%;height:220px}
+.hero h1{font:800 clamp(2.6rem,8vw,4.8rem)/1 var(--font-display);letter-spacing:-.025em;margin:18px 0 14px;max-width:12ch}
+.hero .lede{font-size:1.15rem;max-width:58ch;color:var(--ink-soft);margin:0}
+
+main{max-width:760px;margin:0 auto;padding:0 20px 80px}
+.idcard{margin:32px 0 0;background:var(--surface);border:1px solid var(--rule);border-radius:12px;padding:18px 20px;display:grid;grid-template-columns:2fr 1fr;gap:14px 16px}
+.idcard p{grid-column:1/-1;margin:0;color:var(--ink-soft);font-size:.95rem}
+label.field{display:flex;flex-direction:column;gap:4px;font-weight:700;font-size:.95rem}
+input[type=text],input[type=number],select,textarea{font:inherit;color:var(--ink);background:var(--surface);border:1.5px solid var(--rule);border-radius:8px;padding:9px 11px;width:100%}
+textarea{min-height:96px;resize:vertical;line-height:1.5}
+@media (max-width:560px){.idcard{grid-template-columns:1fr}}
+
+/* sections */
+section.step{margin:84px 0 0}
+.step-head{display:flex;align-items:baseline;gap:14px;margin-bottom:6px}
+.step-no{font:800 3.2rem/1 var(--font-display);color:var(--analog);min-width:1.1ch}
+h2{font:800 clamp(1.7rem,4.6vw,2.2rem)/1.1 var(--font-display);letter-spacing:-.015em;margin:0}
+h3{font:600 1.3rem/1.2 var(--font-display);margin:40px 0 8px}
+p{margin:12px 0;max-width:68ch}
+.muted{color:var(--ink-soft)}
+.small{font-size:.92rem}
+code,.mono{font-family:var(--font-mono);font-size:.92em}
+
+.keyidea{background:var(--chip);border-radius:10px;padding:14px 18px;margin:26px 0 0}
+.keyidea strong{display:block;font-family:var(--font-display);font-size:1.05rem;margin-bottom:2px}
+.keyidea p{margin:4px 0}
+
+/* lab */
+.lab{background:var(--surface);border:1px solid var(--rule);border-radius:12px;overflow:hidden;margin:20px 0}
+.lab canvas{display:block;width:100%;height:270px}
+.lab canvas.short{height:190px}
+@media (max-width:560px){.lab canvas{height:230px}}
+.controls{border-top:1px solid var(--rule);padding:14px 16px;display:flex;flex-wrap:wrap;gap:14px 22px;align-items:center}
+.controls label{display:flex;align-items:center;gap:10px;font-weight:700;font-size:.95rem}
+.controls input[type=range]{accent-color:var(--quant);width:180px}
+.controls .val{font-family:var(--font-mono);font-weight:700;min-width:5ch}
+.readouts{display:flex;flex-wrap:wrap;gap:8px;padding:0 16px 14px}
+.chip{font-family:var(--font-mono);font-size:.82rem;background:var(--chip);border-radius:6px;padding:4px 9px}
+.chip.ok{background:var(--ok-tint);color:var(--ok)}
+.chip.bad{background:var(--bad-tint);color:var(--bad)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;padding:10px 16px 0;font-size:.88rem;color:var(--ink-soft)}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.sw{width:18px;height:0;border-top:3px solid;display:inline-block}
+.sw.dot{width:10px;height:10px;border:none;border-radius:50%}
+.sw.dash{border-top-style:dashed}
+
+/* buttons */
+button{font:inherit;cursor:pointer}
+.btn{background:var(--ink);color:var(--paper);border:none;border-radius:8px;padding:9px 16px;font-weight:700}
+.btn.secondary{background:transparent;color:var(--ink);border:1.5px solid var(--rule)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.big{padding:13px 22px;font-size:1.05rem}
+
+/* questions */
+.q{margin:26px 0;border-left:3px solid var(--quant);padding:2px 0 2px 16px}
+.q .prompt{font-weight:700;margin:0 0 10px}
+.opts{display:grid;gap:7px}
+.opt{display:block;width:100%;text-align:left;background:var(--surface);color:var(--ink);border:1.5px solid var(--rule);border-radius:8px;padding:10px 13px;line-height:1.45}
+.opt[aria-pressed=true]{border-color:var(--quant);background:var(--quant-tint)}
+.opt.right{border-color:var(--ok);background:var(--ok-tint)}
+.opt:disabled{cursor:default}
+.qrow{display:flex;align-items:center;gap:12px;margin-top:10px;flex-wrap:wrap}
+.fb{font-size:.95rem;flex:1 1 260px}
+.fb.ok{color:var(--ok)} .fb.no{color:var(--bad)}
+.numwrap{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.numwrap input{max-width:200px;font-family:var(--font-mono)}
+.levels{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.levels .cell{background:var(--surface);border:1px solid var(--rule);border-radius:8px;padding:10px}
+.levels .cell b{font-family:var(--font-mono);display:block;margin-bottom:6px}
+.levels input{font-family:var(--font-mono)}
+@media (max-width:560px){.levels{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* sort */
+.sort{display:grid;gap:6px}
+.sort .row{display:flex;align-items:center;gap:10px;background:var(--surface);border:1.5px solid var(--rule);border-radius:8px;padding:8px 10px}
+.sort .row .t{flex:1}
+.sort .row.ok{border-color:var(--ok)} .sort .row.no{border-color:var(--bad)}
+.seg{display:flex;border:1.5px solid var(--rule);border-radius:7px;overflow:hidden;flex:none}
+.seg button{background:transparent;border:none;color:var(--ink);padding:6px 11px;font-size:.9rem;font-weight:700}
+.seg button[aria-pressed=true]{background:var(--ink);color:var(--paper)}
+
+/* encode */
+.enc{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:8px;padding:14px 16px;border-top:1px solid var(--rule)}
+.enc label{display:flex;flex-direction:column;gap:4px;font-size:.8rem;color:var(--ink-soft);text-align:center}
+.enc input{text-align:center;font-family:var(--font-mono);font-weight:700;padding:8px 2px}
+.enc input.ok{border-color:var(--ok);background:var(--ok-tint)} .enc input.no{border-color:var(--bad);background:var(--bad-tint)}
+@media (max-width:560px){.enc{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.bitstream{font-family:var(--font-mono);font-size:1.15rem;word-break:break-all;background:var(--chip);border-radius:8px;padding:12px 14px;margin:12px 0 0}
+.bitstream .grp:nth-child(odd){color:var(--quant)}
+
+/* calculator */
+.calc{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;padding:16px}
+@media (max-width:640px){.calc{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.calc-out{padding:0 16px 16px}
+.calc-out .big{font:700 1.6rem/1.2 var(--font-mono)}
+.presets{display:flex;flex-wrap:wrap;gap:8px;padding:14px 16px 0}
+
+/* recap */
+.status{margin:12px 0 0;font-weight:700;min-height:1.5em}
+.checklist{list-style:none;padding:0;margin:16px 0;display:grid;gap:6px}
+.checklist li{display:flex;gap:10px;align-items:center}
+.checklist .mark{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:.8rem;font-weight:700;border:1.5px solid var(--rule);flex:none}
+.checklist li.done .mark{background:var(--ok);border-color:var(--ok);color:var(--surface)}
+#recap{background:#fff;color:#18233D;border:1px solid var(--rule);border-radius:12px;padding:28px 30px;margin-top:24px;font-size:.95rem}
+#recap h4{font:800 1.5rem/1.15 var(--font-display);margin:0 0 4px}
+#recap h5{font:700 1.1rem var(--font-display);margin:24px 0 6px;border-bottom:1px solid #C3CFDF;padding-bottom:4px}
+#recap .qa{margin:10px 0}
+#recap .qa .p{font-weight:700}
+#recap .qa .a{white-space:pre-wrap;margin-left:12px}
+#recap .qa .r{margin-left:12px;font-size:.88rem;color:#4A5878}
+#recap img{display:block;width:100%;max-width:560px;border:1px solid #DCE5F0;border-radius:6px;margin:8px 0 2px}
+#recap .cap{font-size:.85rem;color:#4A5878}
+#recap ul{margin:6px 0;padding-left:20px}
+footer{max-width:760px;margin:0 auto;padding:30px 20px 60px;color:var(--ink-soft);font-size:.9rem;border-top:1px solid var(--rule)}
+footer .btn{margin-top:10px}
+
+@media (prefers-reduced-motion: reduce){*{scroll-behavior:auto!important}}
+@media print{
+  @page{margin:.6in}
+  body{background:#fff!important}
+  body::before{display:none}
+  body *{visibility:hidden}
+  #recap,#recap *{visibility:visible}
+  #recap{position:absolute;left:0;top:0;width:100%;border:none;padding:0;margin:0}
+  #recap h5{break-after:avoid}
+  #recap .qa,#recap img{break-inside:avoid}
+}
+
+/* lossy lesson additions */
+.ctext{font-family:var(--font-mono);font-size:.95rem;line-height:1.75;white-space:pre-wrap;word-break:break-word}
+.panel-title{font-weight:700;font-size:.9rem;color:var(--ink-soft);margin:0 0 8px}
+.small-note{font-size:.85rem;color:var(--ink-soft);margin:8px 0 0}
+.scroll-x{overflow-x:auto}
+.htable{border-collapse:collapse;width:100%;font-size:.9rem}
+.htable th{text-align:left;font-size:.82rem;color:var(--ink-soft);border-bottom:2px solid var(--rule);padding:6px 8px}
+.htable td{padding:6px 8px;border-bottom:1px solid var(--rule);vertical-align:top}
+.sumtable{min-width:640px}
+.swatches{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:3px;max-width:520px}
+.swatches i{display:block;aspect-ratio:1;border-radius:3px}
+svg.tm{display:block;width:100%;height:auto;max-width:640px;margin:0 auto}
+.tm-axis{stroke:var(--ink);stroke-width:2}
+.tm-outline{stroke:var(--ink-soft);stroke-width:1.5}
+.tm-hatch{stroke:var(--ink-soft);opacity:.5}
+.tm-masker{fill:var(--quant-tint);stroke:var(--quant);stroke-width:2}
+.tm-text{fill:var(--ink);font:700 17px var(--font-body)}
+.tm-small{fill:var(--ink-soft);font:13px var(--font-mono)}
+.sel-grid{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px 14px;align-items:center;max-width:640px}
+.sel-grid select{max-width:100%}
+.sel-grid select.ok{border-color:var(--ok);background:var(--ok-tint)}
+.sel-grid select.no{border-color:var(--bad);background:var(--bad-tint)}
+.sel-grid .lbl{font-weight:700;font-size:.95rem}
+.hero canvas{height:230px}
+.home-link{display:inline-block;margin-bottom:8px;color:var(--ink-soft);font-weight:700;font-size:.95rem}
+.remind{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:14px 0}
+@media (max-width:560px){.remind{grid-template-columns:1fr}}
+.remind>div{background:var(--surface);border:1px solid var(--rule);border-top:4px solid var(--ok);border-radius:10px;padding:12px 16px}
+.remind>div+div{border-top-color:var(--analog)}
+.remind strong{font-family:var(--font-display);font-size:1.15rem}
+.remind p{margin:4px 0}
+.imgpair{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px}
+@media (max-width:560px){.imgpair{grid-template-columns:1fr}}
+.imgpair figure{margin:0}
+.imgpair.three{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media (max-width:640px){.imgpair.three{grid-template-columns:1fr}}
+.imgpair figcaption{font-size:.88rem;color:var(--ink-soft);margin-top:6px;font-weight:700}
+.imgpair canvas,.imgpair img{display:block;width:100%;height:auto;aspect-ratio:3/2;border-radius:6px;background:var(--chip)}
+.lab canvas.zoom{height:auto;aspect-ratio:3/2;image-rendering:pixelated}
+.tones{display:flex;flex-wrap:wrap;gap:8px;padding:16px}
+.tones button{min-width:92px}
+.tones button.playing{background:var(--quant);color:#fff;border-color:var(--quant)}
+.vid canvas{height:auto!important;aspect-ratio:16/9}
+.sizebar{display:grid;gap:8px;padding:0 16px 16px}
+.sizebar .row{display:grid;grid-template-columns:150px 1fr 90px;gap:10px;align-items:center;font-size:.9rem}
+.sizebar .bar{height:14px;border-radius:7px;background:var(--chip);overflow:hidden}
+.sizebar .bar i{display:block;height:100%;background:var(--quant);border-radius:7px}
+.sizebar .bar i.png{background:var(--ok)}
+.sizebar .bar i.raw{background:var(--ink-soft)}
+.sizebar .n{font-family:var(--font-mono);text-align:right}
+@media (max-width:560px){.sizebar .row{grid-template-columns:110px 1fr 70px}}
+</style>
+</head>
+<body>
+
+<nav class="progress" aria-label="Lesson progress">
+  <div class="in">
+    <span class="who" id="who">Lossy compression</span>
+    <a href="#why" data-sec="0" aria-label="1: What is lossy compression">1</a>
+    <a href="#images" data-sec="1" aria-label="2: Images">2</a>
+    <a href="#sound" data-sec="2" aria-label="3: Sound">3</a>
+    <a href="#video" data-sec="3" aria-label="4: Video">4</a>
+    <a href="#tradeoff" data-sec="4" aria-label="5: Quality vs. size">5</a>
+    <a href="#check" data-sec="5" aria-label="6: Check your understanding">6</a>
+    <a href="#recap-section" class="recap-link">Recap</a>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="hero-text"><a class="home-link" href="../">AP CSP class home</a></div>
+  <canvas id="hero" aria-label="A sunset picture shown in four bands, each saved with stronger JPEG compression and labeled with its file size"></canvas>
+  <div class="hero-text">
+    <h1>Good enough is good enough</h1>
+    <p class="lede">Photos, songs, and videos are huge, and lossless compression barely dents them. Lossy compression shrinks them much more by throwing away the details your eyes and ears are least likely to miss. Today you decide how much to throw away.</p>
+  </div>
+</header>
+
+<main>
+  <div class="idcard">
+    <label class="field">Your name<input type="text" id="name" autocomplete="name" placeholder="First and last name"></label>
+    <label class="field">Class period<input type="text" id="period" placeholder="e.g. 3"></label>
+    <p>Your work saves in this browser as you go. At the end you’ll download a PDF recap of everything you did and upload it to Canvas.</p>
+  </div>
+
+  <!-- 1 -->
+  <section class="step" id="why">
+    <div class="step-head"><span class="step-no">1</span><h2>What is lossy compression?</h2></div>
+    <p>Last lesson you used lossless compression. Here’s the difference again:</p>
+    <div class="remind">
+      <div><strong>Lossless</strong><p>Shrinks the file without losing anything. Unpacking it gives back the exact original, bit for bit.</p></div>
+      <div><strong>Lossy</strong><p>Shrinks the file much more by permanently throwing away less important information. You can’t get the exact original back.</p></div>
+    </div>
+    <p>Nobody likes losing information. But some files are so large that there just isn’t room to keep everything, and we didn’t need all that data in the first place. That’s often true of <strong>photos, videos, and audio recordings</strong>: files that try to capture the endless detail of the real world. Remember the random-noise picture in the RLE playground? Real photos and sounds are like that, with almost no exact repeats, so lossless methods can’t shrink them much.</p>
+    <p>Lossy compression takes a different approach: figure out which details people can’t perceive, and remove those.</p>
+    <div class="q" data-q="what_mc"></div>
+
+    <h3>Could text be lossy?</h3>
+    <p>Here’s one way to make text smaller by throwing information away: <strong>keep the first letter of each word, then delete every other vowel</strong>. Type your own text and see how readable it stays.</p>
+    <div class="lab">
+      <div style="padding:16px"><label class="field">Your text<textarea id="ltext" style="min-height:80px"></textarea></label></div>
+      <div style="padding:0 16px 16px"><p class="panel-title">Compressed</p><div class="ctext" id="lout" style="min-height:60px"></div></div>
+      <div class="readouts" id="lread"></div>
+    </div>
+    <p class="muted small">Code.org has its own Lossy Text Compression widget: <a href="https://studio.code.org/courses/csp-2025/units/1/lessons/10/levels/1" target="_blank" rel="noopener" style="color:inherit">open it in a new tab</a> after logging in to Code.org, and enter your own text until you understand its algorithm.</p>
+    <div class="q" data-q="txt_desc"></div>
+    <div class="q" data-q="txt_decode"></div>
+    <div class="q" data-q="txt_mc"></div>
+    <div class="keyidea"><strong>Key idea</strong><p>Lossy compression removes the information people are least likely to notice. It makes files far smaller than lossless compression, but the removed details are gone for good. That’s why text is almost never compressed lossily: losing letters can change the meaning.</p></div>
+  </section>
+
+  <!-- 2 -->
+  <section class="step" id="images">
+    <div class="step-head"><span class="step-no">2</span><h2>Images: keep the brightness, average the color</h2></div>
+    <p>An uncompressed color image stores 3 bytes per pixel: red, green, and blue. This 480 × 320 picture has 153,600 pixels, so uncompressed it takes 460,800 bytes, about 450 KB.</p>
+    <p>The human eye is better at noticing differences in <strong>brightness</strong> than differences in <strong>color</strong>. Image formats take advantage of that. First they split every pixel into a brightness part and a color part, called <strong>chroma</strong>. Switch between the views:</p>
+    <div class="lab">
+      <div class="presets" id="views">
+        <button class="btn secondary" type="button" data-v="orig">Original</button>
+        <button class="btn secondary" type="button" data-v="bright">Brightness only</button>
+        <button class="btn secondary" type="button" data-v="chroma">Chroma (color) only</button>
+      </div>
+      <div style="padding:16px"><canvas id="cvView" width="480" height="320" style="width:100%;height:auto;aspect-ratio:3/2;border-radius:6px" aria-label="The picture in the chosen view"></canvas></div>
+    </div>
+    <p>Notice how much of the picture lives in the brightness view: edges, shapes, texture. Now zoom in on 8 × 2 pixels of chroma from the edge between two stripes on the balloon. That’s 16 color values. Averaging each 2 × 2 block leaves only 4 values:</p>
+    <div class="lab">
+      <div style="padding:16px;display:grid;gap:14px">
+        <div><p class="panel-title">Original chroma: 16 values</p><div class="swatches" id="sw16"></div></div>
+        <div><p class="panel-title">Each 2 × 2 block averaged: 4 values</p><div class="swatches" id="sw4"></div></div>
+      </div>
+    </div>
+    <p>Only the block right on the edge changes noticeably, and at normal size you’d never spot it. The averaged version has a quarter of the color information. This is called <strong>chroma subsampling</strong>, and it’s used in JPEG images and MPEG video. Below, the same averaging is applied to the whole picture, either to the color or to the brightness. Drag the slider and compare.</p>
+    <div class="lab">
+      <div class="imgpair three">
+        <figure><canvas id="cvOrig" width="480" height="320" aria-label="The original picture"></canvas><figcaption>Original</figcaption></figure>
+        <figure><canvas id="cvChromaA" width="480" height="320" aria-label="Picture with color averaged and brightness kept sharp"></canvas><figcaption>Color averaged, brightness kept</figcaption></figure>
+        <figure><canvas id="cvChromaB" width="480" height="320" aria-label="Picture with brightness averaged and color kept"></canvas><figcaption>Brightness averaged, color kept</figcaption></figure>
+      </div>
+      <div class="controls">
+        <label for="blur">Average over blocks of <input type="range" id="blur" min="0" max="4" step="1"> <span class="val" id="blurVal"></span></label>
+      </div>
+      <div class="readouts" id="chromaReadout"></div>
+    </div>
+    <div class="q" data-q="chroma_mc"></div>
+    <div class="q" data-q="chroma_num"></div>
+
+    <h3>How JPEG does it</h3>
+    <p>JPEG combines chroma subsampling with a second trick: a math process called the <strong>discrete cosine transform (DCT)</strong> that finds fine brightness details the eye barely notices so they can be simplified or dropped. Then the results are stored with fewer bits.</p>
+    <div class="q" data-q="jpeg_steps"></div>
+    <p>When you save a JPEG you pick a <strong>quality</strong>. In Khan Academy’s example, a 400 × 300 photo of a cat in a hat took 169 KB at 100% quality, 48 KB at 60%, and only 12 KB at 1%, where the green of the eyes started smearing into the fur. This page runs real JPEG compression in your browser, so you can try it yourself. The close-up shows a small patch blown up.</p>
+    <div class="lab">
+      <div class="imgpair">
+        <figure><img id="jpgImg" alt="The picture after JPEG compression at the chosen quality"><figcaption id="jpgCap">JPEG</figcaption></figure>
+        <figure><canvas id="cvZoom" class="zoom" width="240" height="160" aria-label="Close-up of part of the compressed picture"></canvas><figcaption>Close-up, 4× zoom</figcaption></figure>
+      </div>
+      <div class="controls">
+        <label for="jq">Quality <input type="range" id="jq" min="1" max="100" step="1"> <span class="val" id="jqVal"></span></label>
+      </div>
+      <div class="sizebar" id="sizebar"></div>
+    </div>
+    <div class="q" data-q="jpeg_low"></div>
+    <div class="q" data-q="jpeg_mc"></div>
+    <div class="keyidea"><strong>Key idea</strong><p>JPEG keeps brightness detailed, averages color (chroma subsampling), and uses the DCT to simplify fine brightness detail. The quality setting decides how much is thrown away: lower quality, smaller file, more visible blocks and smudges.</p></div>
+  </section>
+
+  <!-- 3 -->
+  <section class="step" id="sound">
+    <div class="step-head"><span class="step-no">3</span><h2>Sound: drop what you can’t hear</h2></div>
+    <p>Your ears have limits too. Audio formats like MP3 analyze a recording and discard sounds outside our hearing, a process called <strong>perceptual audio coding</strong>. The science of what people can and can’t hear is called <strong>psychoacoustics</strong>. Use headphones if you can, and start with your volume low.</p>
+
+    <h3>Limit 1: the highest pitch you can hear</h3>
+    <p>People hear roughly from 20 Hz to 20,000 Hz, and the top end drops with age. Play each tone. (Some laptop speakers can’t play the highest tones at all.)</p>
+    <div class="lab"><div class="tones" id="tones"></div></div>
+    <div class="q" data-q="hear_top"></div>
+
+    <h3>Limit 2: loud sounds hide quiet ones at the same time</h3>
+    <p>When a loud sound plays, a quieter sound at a similar pitch can become impossible to hear. This is <strong>simultaneous masking</strong>. Play the quiet beeps by themselves, then add the loud hiss.</p>
+    <div class="lab">
+      <div class="controls">
+        <button class="btn" type="button" id="beepBtn">Play quiet beeps</button>
+        <button class="btn secondary" type="button" id="noiseBtn">Add loud hiss</button>
+        <button class="btn secondary" type="button" id="maskStop">Stop</button>
+      </div>
+      <p class="small-note" style="padding:0 16px 14px" id="maskState">Nothing playing.</p>
+    </div>
+    <div class="q" data-q="mask_mc"></div>
+
+    <h3>Limit 3: a sudden sound hides what comes just before and after</h3>
+    <p>A sudden loud sound, like a drum hit, can hide quieter sounds for up to about 200 milliseconds after it, and even about 20 milliseconds before it. This is <strong>temporal masking</strong>. The striped areas below are when other sounds get hidden.</p>
+    <div class="lab" style="padding:16px">
+      <svg class="tm" viewBox="0 0 640 260" role="img" aria-label="Graph of loudness over time: a drum hit from 140 to 200 milliseconds masks sounds about 20 milliseconds before it and up to 200 milliseconds after it">
+        <defs><pattern id="hatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="8" class="tm-hatch" stroke-width="2"/></pattern></defs>
+        <path d="M60 210 L250 210 C262 210 266 120 270 70 L370 70 C420 70 470 200 600 208 L600 210 Z" fill="url(#hatch)" class="tm-outline"/>
+        <rect x="270" y="70" width="100" height="140" class="tm-masker"/>
+        <line x1="60" y1="30" x2="60" y2="210" class="tm-axis"/><line x1="60" y1="210" x2="610" y2="210" class="tm-axis"/>
+        <text x="320" y="62" text-anchor="middle" class="tm-text">drum hit</text>
+        <text x="225" y="100" text-anchor="end" class="tm-text">pre-masking</text>
+        <text x="400" y="100" class="tm-text">post-masking</text>
+        <text x="60" y="232" text-anchor="middle" class="tm-small">0</text><text x="190" y="232" text-anchor="middle" class="tm-small">100</text><text x="320" y="232" text-anchor="middle" class="tm-small">200</text><text x="450" y="232" text-anchor="middle" class="tm-small">300</text><text x="580" y="232" text-anchor="middle" class="tm-small">400</text>
+        <text x="335" y="254" text-anchor="middle" class="tm-small">time (ms)</text>
+        <text x="30" y="120" text-anchor="middle" class="tm-small" transform="rotate(-90 30 120)">loudness</text>
+      </svg>
+    </div>
+    <p>Try it. A quiet tick plays near a loud drum hit. Change when the tick happens and listen for it.</p>
+    <div class="lab">
+      <div class="controls">
+        <label for="tdelay">Tick timing
+          <select id="tdelay" style="width:auto">
+            <option value="-150">150 ms before the drum</option><option value="-20">20 ms before</option><option value="30">30 ms after</option><option value="80">80 ms after</option><option value="150">150 ms after</option><option value="300">300 ms after</option><option value="600">600 ms after</option>
+          </select></label>
+        <button class="btn" type="button" id="playDrum">Play drum + tick</button>
+        <button class="btn secondary" type="button" id="playTick">Tick alone</button>
+      </div>
+    </div>
+    <div class="q" data-q="temp_sel"></div>
+    <div class="q" data-q="temp_mc"></div>
+
+    <h3>Cut the highs</h3>
+    <p>Play this melody and lower the cutoff: everything above it is removed. How low can you go before you notice?</p>
+    <div class="lab">
+      <div class="controls">
+        <label for="cutoff">Remove everything above
+          <select id="cutoff" style="width:auto">
+            <option value="20000">20,000 Hz (nothing removed)</option><option value="10000">10,000 Hz</option><option value="6000">6,000 Hz</option><option value="3000">3,000 Hz</option><option value="1500">1,500 Hz</option><option value="800">800 Hz</option>
+          </select></label>
+        <button class="btn" type="button" id="playMel">Play melody</button>
+        <button class="btn secondary" type="button" id="stopMel">Stop</button>
+      </div>
+    </div>
+    <div class="q" data-q="cut_fr"></div>
+    <div class="q" data-q="mp3_num"></div>
+    <div class="keyidea"><strong>Key idea</strong><p>Perceptual audio coding removes sounds people can’t hear: frequencies above our range, quiet sounds hidden by louder ones at the same time (simultaneous masking), and sounds just before or after a sudden loud one (temporal masking). An MP3 can be about a tenth the size of CD audio.</p></div>
+  </section>
+
+  <!-- 4 -->
+  <section class="step" id="video">
+    <div class="step-head"><span class="step-no">4</span><h2>Video</h2></div>
+    <p>A video is a series of pictures, called <strong>frames</strong>, often 30 per second. Storing every frame as a full picture would be enormous. But from one frame to the next, most of the picture usually stays the same. So video formats store an occasional full frame, then for the frames in between store mostly <strong>what changed</strong>.</p>
+    <p>Below, the picture is split into 144 blocks. Purple blocks changed since the last frame and have to be stored. Try each scene.</p>
+    <div class="lab vid">
+      <div class="presets" id="scenes">
+        <button class="btn secondary" type="button" data-s="still">Still scene</button>
+        <button class="btn secondary" type="button" data-s="ball">Bouncing ball</button>
+        <button class="btn secondary" type="button" data-s="pan">Camera pan</button>
+        <button class="btn secondary" type="button" data-s="confetti">Confetti</button>
+      </div>
+      <div style="padding:16px"><canvas id="cvVid" width="480" height="270" style="width:100%;border-radius:6px" aria-label="Video demo with changed blocks highlighted"></canvas></div>
+      <div class="controls"><button class="btn secondary" type="button" id="vidPause">Pause</button><label><input type="checkbox" id="vidGrid" checked> Show changed blocks</label></div>
+      <div class="readouts" id="vidReadout"></div>
+    </div>
+    <div class="q" data-q="vid_mc"></div>
+    <div class="q" data-q="vid_fr"></div>
+    <div class="keyidea"><strong>Key idea</strong><p>Video compression stores full frames only now and then, and otherwise stores just what changed. Scenes where everything changes, like fast camera moves or confetti, need far more data, which is why streams sometimes turn blocky during fast action.</p></div>
+  </section>
+
+  <!-- 5 -->
+  <section class="step" id="tradeoff">
+    <div class="step-head"><span class="step-no">5</span><h2>Quality vs. size</h2></div>
+    <p>With lossless compression, we can always rebuild 100% of the original. With lossy compression, we lose some percentage of the data: maybe 5%, maybe 10%, maybe 70%. How much to lose depends on the <strong>use case</strong>.</p>
+    <p>Khan’s cat photo is a good example. Projected on a big screen for a presentation, it deserves as much detail as possible: lossless PNG, or JPEG at 100%. On a website for people with slow connections, a smaller file loads faster, so a lower quality is the better choice.</p>
+    <div class="q" data-q="cloze"></div>
+    <div class="q" data-q="ftable"></div>
+    <h3>Which matters more?</h3>
+    <p class="muted small">For each situation, decide whether keeping quality or getting a smaller file matters more.</p>
+    <div id="sortq"></div>
+    <div class="q" data-q="use_lossy"></div>
+    <div class="q" data-q="use_lossless"></div>
+    <div class="q" data-q="apps"></div>
+    <details class="lab" style="padding:4px 16px 12px">
+      <summary style="cursor:pointer;font-weight:700;padding:10px 0">Summary table: lossless vs. lossy by media type</summary>
+      <div class="scroll-x"><table class="htable sumtable">
+        <thead><tr><th>Media</th><th>Lossless examples</th><th>Lossy examples</th><th>Lossless is used for</th><th>Lossy is used for</th></tr></thead>
+        <tbody>
+          <tr><td>Text and documents</td><td>ZIP, GZIP</td><td>Rarely used</td><td>Text, code, and documents where every bit must be kept</td><td>Not used: losing data would change the meaning</td></tr>
+          <tr><td>Images</td><td>PNG, TIFF</td><td>JPEG, HEIC, WebP</td><td>Logos, screenshots, technical drawings, medical images</td><td>Web photos, social media, phone cameras</td></tr>
+          <tr><td>Audio</td><td>FLAC, ALAC</td><td>MP3, AAC, OGG</td><td>Studio editing, archiving, mastering</td><td>Streaming music, podcasts, phone storage</td></tr>
+          <tr><td>Video</td><td>FFV1, Apple ProRes</td><td>H.264, H.265, VP9, AV1, MPEG-4</td><td>Professional editing, archival footage</td><td>YouTube, Netflix, video calls</td></tr>
+          <tr><td>Software and data</td><td>ZIP, RAR, 7z</td><td>Not used</td><td>Software, backups, data transfer</td><td>Not used: any loss breaks the program</td></tr>
+        </tbody>
+      </table></div>
+    </details>
+    <div class="keyidea"><strong>Key idea</strong><p>Lossy compression is always a trade-off: more compression means a smaller file but lower quality. Choose based on the use case. When every bit matters, use lossless.</p></div>
+  </section>
+
+  <!-- 6 -->
+  <section class="step" id="check">
+    <div class="step-head"><span class="step-no">6</span><h2>Check your understanding</h2></div>
+    <p>These are written in the style of AP CSP exam questions.</p>
+    <div class="q" data-q="ap1"></div>
+    <div class="q" data-q="ap2"></div>
+    <div class="q" data-q="ap3"></div>
+    <div class="q" data-q="ap4"></div>
+    <h3>Reflect</h3>
+    <div class="q" data-q="refl_text"></div>
+    <div class="q" data-q="refl_surprise"></div>
+    <div class="keyidea"><strong>Last step</strong><p>Complete Khan Academy’s <a href="https://www.khanacademy.org/computing/ap-computer-science-principles/x2d2f703b37b450a3:digital-information/x2d2f703b37b450a3:data-compression/e/lossy-vs-lossless-compression" target="_blank" rel="noopener" style="color:inherit">Lossy vs. lossless compression practice</a> while signed in to your class account.</p></div>
+  </section>
+
+  <!-- recap -->
+  <section class="step" id="recap-section">
+    <div class="step-head"><span class="step-no">✓</span><h2>Recap and submit</h2></div>
+    <p>Finish every section, then download your PDF and upload it to the Canvas assignment. The PDF includes your answers, your chosen settings, and the key ideas from each step, so it doubles as your study notes.</p>
+    <ul class="checklist" id="checklist"></ul>
+    <p id="scoreLine" class="muted"></p>
+    <div class="qrow">
+      <button class="btn big" type="button" id="dlPdf">Download PDF</button>
+      <button class="btn secondary big" type="button" id="printPdf">Print or save as PDF</button>
+    </div>
+    <p class="status" id="status" aria-live="polite"></p>
+    <div id="recap" aria-label="Preview of your recap"></div>
+  </section>
+</main>
+
+<footer>
+  <p>Adapted from Khan Academy’s AP CSP article “Lossy compression” (DAT-1.D).</p>
+  <p><a href="../" style="color:inherit">Back to AP CSP class home</a></p>
+  <button class="btn secondary" type="button" id="reset">Erase my answers and start over</button>
+</footer>
+
+<script>
+(function(){
+'use strict';
+
+/* ---------- state ---------- */
+const STORE='lossy-lesson-v1';
+const DEF_SET=()=>({blur:1,jq:50,scene:'ball',cutoff:'20000',view:'orig',tdelay:'80',ltext:'Meet me at the gym after school. Bring your notes about compression and your laptop.'});
+let S={name:'',period:'',ans:{},set:DEF_SET()};
+try{
+  const raw=localStorage.getItem(STORE);
+  if(raw){const o=JSON.parse(raw); S.name=o.name||''; S.period=o.period||''; S.ans=o.ans||{}; S.set=Object.assign(DEF_SET(),o.set||{});}
+}catch(e){}
+let saveT=null;
+function save(){ clearTimeout(saveT); saveT=setTimeout(()=>{try{localStorage.setItem(STORE,JSON.stringify(S));}catch(e){}},150); updateProgress(); }
+function A(id){ return S.ans[id]||(S.ans[id]={}); }
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt=n=>n.toLocaleString('en-US');
+const parseNum=s=>{const v=parseFloat(String(s).replace(/[,% ]/g,''));return isFinite(v)?v:null;};
+const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const SPEAK={};
+
+/* ---------- questions ---------- */
+const SORT=[
+  ['A photo projected on a giant screen for a school assembly','quality'],
+  ['Photos on a website for people with slow internet','size'],
+  ['An X-ray a doctor will examine for a tiny fracture','quality'],
+  ['Small preview thumbnails in search results','size'],
+  ['A video call over weak cafeteria wifi','size'],
+  ['The master copy of a movie a studio archives','quality']
+];
+const BLURS=[1,2,4,8,16];
+const TONES=[1000,8000,12000,14000,15000,16000,17000,18000,19000];
+const Q={
+  what_mc:{sec:0,type:'mc',auto:true,prompt:'What is the key difference between lossy and lossless compression?',
+    options:['Lossy compression is only for text.','Lossy compression permanently discards less important information, so the original can’t be rebuilt exactly.','Lossy compression always keeps 100% of the data.','Lossy files are always larger than lossless files.'],answer:1,
+    explain:'Lossless can always rebuild 100% of the original. Lossy trades some information for a much smaller file.'},
+  txt_desc:{sec:0,type:'fr',prompt:'Describe the algorithm on this page and the one in Code.org’s widget in your own words. How are they alike or different?'},
+  txt_decode:{sec:0,type:'fr',prompt:'Decompress these: “bt”, “ht”, and “fr.” List every word each one could have been.'},
+  txt_mc:{sec:0,type:'mc',auto:true,prompt:'Why isn’t lossy compression used for text files like Word, Google Docs, or .txt?',
+    options:['Text files are already as small as possible.','The exact words can’t always be rebuilt, so the meaning could change.','Computers can’t store vowels.','Lossy compression only works on numbers.'],answer:1,
+    explain:'“bt” could be bat, bet, bit, but, or boat. For text, code, and data, every character matters, so they use lossless compression.'},
+  chroma_mc:{sec:1,type:'mc',auto:true,prompt:'Set the slider to 8 × 8. Which picture looks closer to a normal, sharp photo?',
+    options:['Color averaged, brightness kept','Brightness averaged, color kept','They look equally blurry','Neither looks blurry'],answer:0,
+    explain:'Your eyes rely on brightness for edges and detail, so averaging only the color is hard to notice. That’s why JPEG subsamples chroma, not brightness.',hint:'Look at the edges of the balloon, the trees, and the mountains.'},
+  chroma_num:{sec:1,type:'num',auto:true,prompt:'A picture has 3 equal parts: brightness and two chroma parts. With 2 × 2 averaging, each chroma part keeps 1/4 of its data and brightness stays full. What percent of the original size is left?',
+    unit:'%',check:v=>v===50,explain:'(1 + 1/4 + 1/4) ÷ 3 = 1.5 ÷ 3 = 50%. Half the size, and it looks almost the same.',hint:'Add the three parts (1 for brightness, 1/4 for each chroma part), then divide by 3.'},
+  jpeg_steps:{sec:1,type:'selects',auto:true,prompt:'Put JPEG’s steps in order.',
+    items:[['Step 1','Separate brightness from color (chroma)'],['Step 2','Average the color over small blocks (chroma subsampling)'],['Step 3','Simplify fine brightness detail with the DCT and store it with fewer bits']].map(([l,a],k,arr)=>({label:l,options:['Separate brightness from color (chroma)','Average the color over small blocks (chroma subsampling)','Simplify fine brightness detail with the DCT and store it with fewer bits'],answer:a})),
+    explain:'Split the picture, shrink the color, simplify the brightness, then store it compactly.'},
+  jpeg_low:{sec:1,type:'rec',prompt:'Drag the JPEG quality down. What’s the lowest quality where the full picture (not the close-up) still looks fine to you? Your setting and file size are recorded.'},
+  jpeg_mc:{sec:1,type:'mc',auto:true,prompt:'Set the quality to 5 and look at the close-up. What has the compression done?',
+    options:['Made the picture sharper','Added visible square blocks and smeared color along edges','Turned the picture black and white','Nothing; JPEG is lossless'],answer:1,
+    explain:'JPEG works on small square blocks and stores color in less detail. At low quality those blocks and smears show, like the cat’s green eyes smearing into its fur at 1%.'},
+  hear_top:{sec:2,type:'select',prompt:'What’s the highest tone you could hear?',options:['1,000 Hz','8,000 Hz','12,000 Hz','14,000 Hz','15,000 Hz','16,000 Hz','17,000 Hz','18,000 Hz','19,000 Hz','I couldn’t hear any']},
+  mask_mc:{sec:2,type:'mc',auto:true,prompt:'What happened to the quiet beeps when the loud hiss played?',
+    options:['They got louder.','They were hidden by the hiss, even though they were still playing.','They changed pitch.','They stopped playing.'],answer:1,
+    explain:'That’s simultaneous masking. If you can’t hear a sound anyway, an MP3 encoder can delete it or store it with fewer bits.'},
+  temp_sel:{sec:2,type:'select',prompt:'Which tick timings could you clearly hear? Pick the closest one to the drum that you could still hear.',options:['150 ms before the drum','20 ms before','30 ms after','80 ms after','150 ms after','300 ms after','600 ms after','I could hear all of them']},
+  temp_mc:{sec:2,type:'mc',auto:true,prompt:'A song has a loud drum beat. Why can an audio encoder throw away quiet sounds in the 200 milliseconds after each beat?',
+    options:['Because the drum makes the file louder','Because temporal masking hides them from our ears, even though the computer can see them in the file','Because sounds after a drum are always silent','Because MP3 files can’t store drums'],answer:1,
+    explain:'The data is in the recording, but our ears can’t hear it, so removing it saves space without a noticeable change.'},
+  cut_fr:{sec:2,type:'fr',prompt:'At what cutoff did you first notice the melody changing, and how did it sound different?'},
+  mp3_num:{sec:2,type:'num',auto:true,prompt:'CD-quality audio uses about 1,411 kilobits per second. A typical MP3 uses 128 kilobits per second. About how many times smaller is the MP3?',
+    unit:'times smaller',check:v=>v>=10.5&&v<=11.5,explain:'1,411 ÷ 128 ≈ 11. An MP3 is roughly a tenth of the size.',hint:'Divide the CD rate by the MP3 rate.'},
+  vid_mc:{sec:3,type:'mc',auto:true,prompt:'Which scene needs the most data per frame?',
+    options:['The still scene','The bouncing ball','The camera pan, because almost every block changes every frame','They all need the same amount'],answer:2,
+    explain:'When the camera moves, nearly every block changes, so there’s little to reuse from the frame before. Confetti has a similar problem.'},
+  vid_fr:{sec:3,type:'fr',prompt:'Streaming videos sometimes turn blocky during fast action, explosions, or confetti. Use what you saw in the demo to explain why.'},
+  cloze:{sec:4,type:'selects',auto:true,prompt:'Complete the trade-off.',
+    items:[{label:'Higher compression: file size',options:['smaller','larger'],answer:'smaller'},{label:'Higher compression: quality',options:['higher','lower'],answer:'lower'},{label:'Lower compression: file size',options:['smaller','larger'],answer:'larger'},{label:'Lower compression: quality',options:['higher','lower'],answer:'higher'}],
+    explain:'More compression throws away more information: smaller file, lower quality.'},
+  ftable:{sec:4,type:'selects',auto:true,prompt:'Common lossy file types: match each to its media and a typical use.',
+    items:[['JPEG','Image','Photos on websites, social media, and phone cameras'],['MP3','Audio','Streaming music and podcasts'],['MP4','Video','Streaming movies and video calls']].flatMap(([f,m,u])=>[{label:f+': media',options:['Image','Audio','Video'],answer:m},{label:f+': use',options:['Photos on websites, social media, and phone cameras','Streaming music and podcasts','Streaming movies and video calls'],answer:u}]),
+    explain:'JPEG for photos, MP3 for audio, MP4 for video.'},
+  sort:{sec:4,type:'sort',auto:true,prompt:'Quality or size: which matters more?'},
+  use_lossy:{sec:4,type:'fr',prompt:'Use LOSSY compression when… (list three situations)'},
+  use_lossless:{sec:4,type:'fr',prompt:'Use LOSSLESS compression when… (list three situations)'},
+  apps:{sec:4,type:'fr',prompt:'List three real-world apps or services that use lossy compression, and what each one compresses.'},
+  ap1:{sec:5,type:'mc',auto:true,prompt:'Which of the following is an advantage of lossy compression over lossless compression?',
+    options:['Lossy compression can always rebuild the original file exactly.','Lossy compression can usually make files much smaller.','Lossy compression works only on text files.','Lossy compression never changes the quality of a file.'],answer:1,
+    explain:'Giving up some detail lets lossy compression shrink files much more than lossless methods can.'},
+  ap2:{sec:5,type:'mc',auto:true,prompt:'A photo is compressed using a lossy algorithm. Which statement is true?',
+    options:['The original photo can be perfectly reconstructed from the compressed file.','Some information from the original photo cannot be recovered.','The compressed file is guaranteed to be larger than the original.','The photo’s resolution must stay exactly the same.'],answer:1,
+    explain:'That’s what makes it lossy: discarded information is gone for good.'},
+  ap3:{sec:5,type:'mc',auto:true,prompt:'A video streaming service uses lossy compression. Which is the most likely reason?',
+    options:['To make sure every frame is identical to the original recording','To reduce the amount of data sent, so videos load and play smoothly on slower connections','Because lossless compression doesn’t work on any video','To add more detail to the video'],answer:1,
+    explain:'Streaming is about getting data to you fast. Small, hard-to-notice losses are worth smoother playback.'},
+  ap4:{sec:5,type:'mc',auto:true,prompt:'For which of the following would lossy compression be LEAST appropriate?',
+    options:['A song in a playlist','A photo shared on social media','A spreadsheet of a company’s financial records','A movie trailer'],answer:2,
+    explain:'Changing even one number in financial records could be a serious error. Records like this need lossless compression.'},
+  refl_text:{sec:5,type:'fr',prompt:'Why can’t we use lossy compression for text files?'},
+  refl_surprise:{sec:5,type:'fr',prompt:'What’s one surprising thing you learned about lossy compression?'}
+};
+const SECTIONS=['What is lossy compression?','Images','Sound','Video','Quality vs. size','Check your understanding'];
+const ORDER=Object.keys(Q);
+
+function isDone(id){
+  const q=Q[id], a=S.ans[id]||{};
+  if(q.type==='fr') return !!(a.value&&a.value.trim().split(/\s+/).length>=3);
+  if(q.type==='select') return a.value!=null&&a.value!=='';
+  if(q.type==='rec') return a.value!=null;
+  if(q.type==='selects') return (a.tries||0)>0;
+  return (a.tries||0)>0;
+}
+function resultText(id){
+  const q=Q[id], a=S.ans[id]||{};
+  if(!q.auto) return '';
+  if(!a.tries) return 'Not attempted';
+  if(q.type==='sort') return `${a.score||0} of ${SORT.length} correct`+(a.tries>1?` after ${a.tries} checks`:' on the first check');
+  if(a.correct) return a.tries===1?'Correct on the first try':`Correct after ${a.tries} tries`;
+  return `Not correct yet (${a.tries} ${a.tries===1?'try':'tries'})`;
+}
+function answerText(id){
+  const q=Q[id], a=S.ans[id]||{};
+  if(q.type==='mc') return a.value!=null?q.options[a.value]:'(no answer)';
+  if(q.type==='sort') return SORT.map((it,i)=>`${it[0]}: ${({quality:'Keep high quality',size:'Smaller file'})[(a.value||{})[i]]||'(blank)'}`).join('\n');
+  if(q.type==='selects') return q.items.map((it,k)=>`${it.label}: ${(a.value||{})[k]||'(blank)'}`).join('\n');
+  if(q.type==='rec') return a.value!=null?`Quality ${a.value}: ${a.kb} KB (uncompressed 450 KB${a.png?`, lossless PNG ${a.png} KB`:''})`:'(not recorded)';
+  return (a.value!=null&&a.value!=='')?String(a.value):'(no answer)';
+}
+function promptText(id){ return Q[id].prompt; }
+
+/* ---------- question rendering ---------- */
+/* ---------- question rendering ---------- */
+function feedback(el,a,q){
+  const fb=el.querySelector('.fb'); if(!fb) return;
+  if(!a.tries){fb.textContent='';fb.className='fb';return;}
+  if(a.correct){fb.className='fb ok';fb.textContent='Correct. '+(q.explain||'');}
+  else{fb.className='fb no';fb.textContent='Not quite. '+(q.hint||'Look back at the activity and try again.');}
+}
+function renderMC(el,id,q){
+  el.innerHTML=`<p class="prompt">${esc(q.prompt)}</p><div class="opts" role="group" aria-label="${esc(q.prompt)}"></div><div class="qrow"><button class="btn" type="button">Check</button><span class="fb" aria-live="polite"></span></div>`;
+  const box=el.querySelector('.opts'), a=A(id);
+  const paint=()=>{[...box.children].forEach((b,i)=>{b.setAttribute('aria-pressed',a.value===i);b.classList.toggle('right',!!a.correct&&i===q.answer);b.disabled=!!a.correct;}); el.querySelector('.btn').disabled=!!a.correct;};
+  q.options.forEach((o,i)=>{const b=document.createElement('button');b.type='button';b.className='opt';b.textContent=o;b.onclick=()=>{a.value=i;paint();save();};box.appendChild(b);});
+  el.querySelector('.btn').onclick=()=>{
+    if(a.value==null){const fb=el.querySelector('.fb');fb.className='fb no';fb.textContent='Choose an answer first.';return;}
+    a.tries=(a.tries||0)+1; a.correct=a.value===q.answer; paint(); feedback(el,a,q); save();
+  };
+  paint(); feedback(el,a,q);
+}
+function renderInput(el,id,q,numeric){
+  el.innerHTML=`<p class="prompt">${esc(q.prompt)}</p><div class="numwrap"><input type="text" ${numeric?'inputmode="decimal"':''} spellcheck="false" aria-label="${esc(q.prompt)}"><span class="muted">${esc(q.unit||'')}</span></div><div class="qrow"><button class="btn" type="button">Check</button><span class="fb" aria-live="polite"></span></div>`;
+  const inp=el.querySelector('input'), a=A(id);
+  if(!numeric) inp.style.maxWidth='320px';
+  inp.value=a.value||'';
+  const lock=()=>{inp.disabled=!!a.correct;el.querySelector('.btn').disabled=!!a.correct;};
+  inp.oninput=()=>{a.value=inp.value;save();};
+  const go=()=>{
+    let ok;
+    if(numeric){ const v=parseNum(inp.value); if(v==null){const fb=el.querySelector('.fb');fb.className='fb no';fb.textContent='Type a number first.';return;} ok=!!q.check(v); }
+    else { if(!inp.value.trim()){const fb=el.querySelector('.fb');fb.className='fb no';fb.textContent='Type an answer first.';return;} ok=!!q.check(inp.value); }
+    a.tries=(a.tries||0)+1; a.correct=ok; lock(); feedback(el,a,q); save();
+  };
+  el.querySelector('.btn').onclick=go; inp.onkeydown=e=>{if(e.key==='Enter')go();};
+  lock(); feedback(el,a,q);
+}
+function renderSpeak(el,id){
+  const [abbr,ans]=SPEAK[id], a=A(id);
+  el.innerHTML=`<b>${esc(abbr)}</b><input type="text" aria-label="Full text for ${esc(abbr)}" placeholder="Full text"><div class="fb small" aria-live="polite"></div>`;
+  const inp=el.querySelector('input'), fb=el.querySelector('.fb'); inp.value=a.value||'';
+  const paint=()=>{ if(!a.value||!a.value.trim()){fb.textContent='';return;} const v=a.value.trim().toLowerCase().replace(/[^a-z ,!]/g,''); const hit=ans.some(x=>v.replace(/[^a-z]/g,'')===x.replace(/[^a-z]/g,'')); fb.className='fb small '+(hit?'ok':'');fb.textContent=hit?'Matches.':'Most people would say: '+ans[0]; };
+  inp.oninput=()=>{a.value=inp.value;save();}; inp.onchange=paint; inp.onkeydown=e=>{if(e.key==='Enter')paint();};
+  paint();
+}
+function renderFR(el,id,q){
+  el.innerHTML=`<p class="prompt">${esc(q.prompt)}</p><textarea aria-label="${esc(q.prompt)}" placeholder="Type your answer"></textarea>`;
+  const t=el.querySelector('textarea'), a=A(id); t.value=a.value||'';
+  t.oninput=()=>{a.value=t.value;save();};
+}
+function renderTool(el,id,q){ el.innerHTML=`<p class="prompt">${esc(q.prompt)}</p><p class="mono small" id="toolResult"></p>`; }
+function renderSelect(el,id,q){
+  el.innerHTML=`<p class="prompt">${esc(q.prompt)}</p><select aria-label="${esc(q.prompt)}" style="max-width:280px"><option value="">Choose…</option>${q.options.map(o=>`<option>${esc(o)}</option>`).join('')}</select>`;
+  const s=el.querySelector('select'), a=A(id); s.value=a.value||'';
+  s.onchange=()=>{a.value=s.value;save();};
+}
+function renderSelects(el,id,q){
+  const a=A(id); a.value=a.value||{};
+  el.innerHTML=`<p class="prompt">${esc(q.prompt)}</p><div class="sel-grid">${q.items.map((it,k)=>`<span class="lbl">${esc(it.label)}</span><select data-k="${k}" aria-label="${esc(it.label)}"><option value="">Choose…</option>${it.options.map(o=>`<option>${esc(o)}</option>`).join('')}</select>`).join('')}</div><div class="qrow"><button class="btn" type="button">Check</button><span class="fb" aria-live="polite"></span></div>`;
+  const sels=[...el.querySelectorAll('select')], fb=el.querySelector('.fb'), btn=el.querySelector('.btn');
+  const paint=()=>{ sels.forEach((s,k)=>{ s.value=a.value[k]||''; s.classList.remove('ok','no'); if(a.tries&&a.value[k]) s.classList.add(a.value[k]===q.items[k].answer?'ok':'no'); s.disabled=!!a.correct; }); btn.disabled=!!a.correct;
+    if(a.tries){ fb.className='fb '+(a.correct?'ok':'no'); fb.textContent=a.correct?'Correct. '+(q.explain||''):'Not quite. Fix the ones outlined in red.'; } };
+  sels.forEach((s,k)=>s.onchange=()=>{a.value[k]=s.value; s.classList.remove('ok','no'); save();});
+  btn.onclick=()=>{ if(sels.some((s,k)=>!a.value[k])){ fb.className='fb no'; fb.textContent='Choose an answer for each one first.'; return; } a.tries=(a.tries||0)+1; a.correct=q.items.every((it,k)=>a.value[k]===it.answer); paint(); save(); };
+  paint();
+}
+function renderRec(el,id,q){
+  el.innerHTML=`<p class="prompt">${esc(q.prompt)}</p><div class="qrow"><button class="btn" type="button">Record my setting</button><span class="fb" aria-live="polite"></span></div>`;
+  const a=A(id), fb=el.querySelector('.fb');
+  const show=()=>{ if(a.value!=null){ fb.className='fb ok'; fb.textContent=`Recorded: quality ${a.value}, ${a.kb} KB. That’s ${Math.round(a.kb/450*100)}% of the uncompressed size.`; } };
+  el.querySelector('.btn').onclick=()=>{ a.value=S.set.jq; a.kb=JPG.kb; a.png=JPG.pngkb; show(); save(); };
+  show();
+}
+document.querySelectorAll('[data-q]').forEach(el=>{
+  const id=el.dataset.q, q=Q[id];
+  if(q.type==='mc') renderMC(el,id,q);
+  else if(q.type==='num') renderInput(el,id,q,true);
+  else if(q.type==='fr') renderFR(el,id,q);
+  else if(q.type==='select') renderSelect(el,id,q);
+  else if(q.type==='selects') renderSelects(el,id,q);
+});
+
+/* sort */
+(function(){
+  const root=$('#sortq'), a=A('sort'); a.value=a.value||{};
+  root.innerHTML=`<div class="sort"></div><div class="qrow"><button class="btn" type="button">Check my choices</button><span class="fb" aria-live="polite"></span></div>`;
+  const list=root.querySelector('.sort'), fb=root.querySelector('.fb');
+  const paint=()=>{
+    [...list.children].forEach((row,i)=>{
+      row.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',a.value[i]===b.dataset.v));
+      row.classList.remove('ok','no');
+      if(a.tries&&a.value[i]) row.classList.add(a.value[i]===SORT[i][1]?'ok':'no');
+    });
+    if(a.tries){ fb.className='fb '+(a.correct?'ok':'no'); fb.textContent=a.correct?'All match. When details matter or the file will be studied closely, keep quality; when speed or space matters more, go smaller.':`${a.score} of ${SORT.length} match. For the rows in red, ask: who will look at this, and how closely?`; }
+  };
+  SORT.forEach((it,i)=>{
+    const row=document.createElement('div'); row.className='row';
+    row.innerHTML=`<span class="t">${esc(it[0])}</span><span class="seg" role="group" aria-label="${esc(it[0])}"><button type="button" data-v="quality">Keep quality</button><button type="button" data-v="size">Smaller file</button></span>`;
+    row.querySelectorAll('button').forEach(b=>b.onclick=()=>{a.value[i]=b.dataset.v;paint();save();});
+    list.appendChild(row);
+  });
+  root.querySelector('.btn').onclick=()=>{
+    const n=Object.keys(a.value).length;
+    if(n<SORT.length){fb.className='fb no';fb.textContent=`Choose for all ${SORT.length} first (${n} done).`;return;}
+    a.tries=(a.tries||0)+1; a.score=SORT.filter((it,i)=>a.value[i]===it[1]).length; a.correct=a.score===SORT.length; paint(); save();
+  };
+  paint();
+})();
+
+/* ---------- palette helpers ---------- */
+const LIGHT={ink:'#18233D',soft:'#4A5878',grid:'#DCE5F0',rule:'#C3CFDF',analog:'#C98200',quant:'#6A3FB5',surface:'#FFFFFF',chip:'#EAF0F7'};
+function cssPal(){const cs=getComputedStyle(document.documentElement);const g=n=>cs.getPropertyValue(n).trim();return{ink:g('--ink'),soft:g('--ink-soft'),grid:g('--grid'),rule:g('--rule'),analog:g('--analog'),quant:g('--quant'),surface:g('--surface'),chip:g('--chip')};}
+function setup(c,fixedW,fixedH){
+  const r=c.getBoundingClientRect(); const w=fixedW||Math.max(200,r.width), h=fixedH||r.height||200, d=window.devicePixelRatio||1;
+  c.width=Math.round(w*d); c.height=Math.round(h*d);
+  const x=c.getContext('2d'); x.setTransform(d,0,0,d,0,0); x.clearRect(0,0,w,h); return {x,w,h};
+}
+
+
+/* ---------- the picture ---------- */
+function rng(seed){ let s=seed>>>0; return ()=>{ s=(s*1664525+1013904223)>>>0; return s/4294967296; }; }
+function drawScene(x,w,h,off){
+  off=off||0;
+  const r=rng(7);
+  const sky=x.createLinearGradient(0,0,0,h*.64);
+  sky.addColorStop(0,'#1d2b6e'); sky.addColorStop(.38,'#6b4ea6'); sky.addColorStop(.72,'#ef8a5b'); sky.addColorStop(1,'#fac36b');
+  x.fillStyle=sky; x.fillRect(0,0,w,h*.64);
+  const sx=w*.68-off*.2, sy=h*.56;
+  const glow=x.createRadialGradient(sx,sy,0,sx,sy,h*.35); glow.addColorStop(0,'rgba(255,240,190,.95)'); glow.addColorStop(.18,'rgba(255,210,140,.6)'); glow.addColorStop(1,'rgba(255,170,110,0)');
+  x.fillStyle=glow; x.fillRect(0,0,w,h*.64);
+  x.fillStyle='#fff3c8'; x.beginPath(); x.arc(sx,sy,h*.06,0,Math.PI*2); x.fill();
+  for(let i=0;i<5;i++){ x.fillStyle=`rgba(255,${150+i*15},${170+i*10},.35)`; x.beginPath(); x.ellipse(((i*.23+.05)*w-off*.4)%(w*1.2),h*(.12+i*.06),w*.12,h*.025,0,0,Math.PI*2); x.fill(); }
+  const ridge=(base,amp,col1,col2,seed,par)=>{ const rr=rng(seed); const pts=[]; for(let i=0;i<=24;i++) pts.push(base-amp*(.3+.7*rr())); const g=x.createLinearGradient(0,base-amp,0,h*.64); g.addColorStop(0,col1); g.addColorStop(1,col2); x.fillStyle=g; x.beginPath(); x.moveTo(0,h*.64); for(let i=0;i<=40;i++){ const X=i/40*w; const u=((X+off*par)/w*24)%24; const k=Math.floor(u), f=u-k; const y=pts[k%24]*(1-f)+pts[(k+1)%24]*f; x.lineTo(X,y);} x.lineTo(w,h*.64); x.closePath(); x.fill(); };
+  ridge(h*.55,h*.2,'#8a6cb8','#5b4a8c',3,.3);
+  ridge(h*.62,h*.14,'#4a3b78','#2e2655',11,.6);
+  const lake=x.createLinearGradient(0,h*.64,0,h); lake.addColorStop(0,'#f2a26b'); lake.addColorStop(.35,'#9b6aa3'); lake.addColorStop(1,'#25306a');
+  x.fillStyle=lake; x.fillRect(0,h*.64,w,h*.36);
+  for(let i=0;i<46;i++){ const yy=h*.66+r()*h*.32, ww=w*(.05+r()*.12), xx=r()*w; x.fillStyle=`rgba(255,${200+r()*40|0},170,${.12+r()*.18})`; x.fillRect(xx,yy,ww,1.5); }
+  for(let i=0;i<14;i++){ const yy=h*.66+i*h*.022; x.fillStyle='rgba(255,226,160,.55)'; x.fillRect(sx-(18-i)*w*.002,yy,(36-i*2)*w*.002+6,2); }
+  const bx=w*.24-off*.5, by=h*.27, br=h*.12;
+  const cols=['#e63946','#ffd166','#2a9d8f','#e63946','#ffd166','#2a9d8f'];
+  x.save(); x.beginPath(); x.ellipse(bx,by,br*.85,br,0,0,Math.PI*2); x.clip();
+  for(let i=0;i<6;i++){ x.fillStyle=cols[i]; x.fillRect(bx-br*.85+i*br*1.7/6,by-br,br*1.7/6+1,br*2); }
+  x.restore();
+  x.strokeStyle='#3a2a20'; x.lineWidth=1.2; x.beginPath(); x.moveTo(bx-br*.45,by+br*.85); x.lineTo(bx-br*.18,by+br*1.32); x.moveTo(bx+br*.45,by+br*.85); x.lineTo(bx+br*.18,by+br*1.32); x.stroke();
+  x.fillStyle='#7a4a2a'; x.fillRect(bx-br*.2,by+br*1.3,br*.4,br*.28);
+  const tx=w*.45-off*.8, ty=h*.8;
+  x.fillStyle='#3b1f1a'; x.fillRect(tx-w*.05,ty,w*.1,h*.025);
+  x.fillStyle='#d62828'; x.beginPath(); x.moveTo(tx,ty-h*.12); x.lineTo(tx,ty-h*.005); x.lineTo(tx+w*.045,ty-h*.005); x.closePath(); x.fill();
+  x.fillStyle='#f1faee'; x.beginPath(); x.moveTo(tx-w*.004,ty-h*.1); x.lineTo(tx-w*.004,ty-h*.005); x.lineTo(tx-w*.035,ty-h*.005); x.closePath(); x.fill();
+  const tr=rng(21);
+  for(let i=0;i<9;i++){ const px=((w*.72+i*w*.035+tr()*w*.02-off*1.2)%(w*1.1)+w*1.1)%(w*1.1)-w*.05, ph=h*(.18+tr()*.16), base=h*.7+tr()*h*.04; x.fillStyle=i%2?'#132a1e':'#1b3a28'; x.beginPath(); x.moveTo(px,base-ph); x.lineTo(px-ph*.28,base); x.lineTo(px+ph*.28,base); x.closePath(); x.fill(); }
+  const id=x.getImageData(0,0,Math.round(x.canvas.width),Math.round(x.canvas.height)), d=id.data, nr=rng(99);
+  for(let i=0;i<d.length;i+=4){ const n=(nr()-.5)*14; d[i]+=n; d[i+1]+=n; d[i+2]+=n; }
+  x.putImageData(id,0,0);
+}
+const SRC=document.createElement('canvas'); SRC.width=480; SRC.height=320; drawScene(SRC.getContext('2d'),480,320);
+const SRCDATA=SRC.getContext('2d').getImageData(0,0,480,320);
+
+/* ---------- brightness vs color ---------- */
+function blockAvg(arr,w,h,f){
+  if(f<=1) return arr;
+  const out=new Float32Array(arr.length);
+  for(let by=0;by<h;by+=f) for(let bx=0;bx<w;bx+=f){
+    let s=0,n=0; for(let y=by;y<Math.min(h,by+f);y++) for(let x=bx;x<Math.min(w,bx+f);x++){ s+=arr[y*w+x]; n++; }
+    const m=s/n; for(let y=by;y<Math.min(h,by+f);y++) for(let x=bx;x<Math.min(w,bx+f);x++) out[y*w+x]=m;
+  }
+  return out;
+}
+const W=480,H=320,NPX=W*H;
+const YC=new Float32Array(NPX), CB=new Float32Array(NPX), CR=new Float32Array(NPX);
+(function(){ const d=SRCDATA.data; for(let i=0;i<NPX;i++){ const R=d[i*4],G=d[i*4+1],B=d[i*4+2]; YC[i]=.299*R+.587*G+.114*B; CB[i]=128-.168736*R-.331264*G+.5*B; CR[i]=128+.5*R-.418688*G-.081312*B; } })();
+function recombine(Y,Cb,Cr){
+  const out=new ImageData(W,H), d=out.data;
+  for(let i=0;i<NPX;i++){ const y=Y[i],cb=Cb[i]-128,cr=Cr[i]-128; d[i*4]=y+1.402*cr; d[i*4+1]=y-.344136*cb-.714136*cr; d[i*4+2]=y+1.772*cb; d[i*4+3]=255; }
+  return out;
+}
+$('#cvOrig').getContext('2d').putImageData(SRCDATA,0,0);
+function updChroma(){
+  const f=BLURS[S.set.blur]; $('#blur').value=S.set.blur; $('#blurVal').textContent=f===1?'none':`${f} × ${f}`;
+  $('#cvChromaA').getContext('2d').putImageData(recombine(YC,blockAvg(CB,W,H,f),blockAvg(CR,W,H,f)),0,0);
+  $('#cvChromaB').getContext('2d').putImageData(recombine(blockAvg(YC,W,H,f),CB,CR),0,0);
+  const pct=Math.round((1+2/(f*f))/3*1000)/10;
+  $('#chromaReadout').innerHTML=f===1?'<span class="chip">Both pictures are the original</span>':`<span class="chip">Color averaged over ${f} × ${f} blocks: each chroma part keeps 1/${f*f} of its data</span><span class="chip ok">Color-averaged picture: ${pct}% of the original size</span>`;
+}
+$('#blur').oninput=e=>{S.set.blur=+e.target.value;updChroma();save();};
+
+/* ---------- JPEG ---------- */
+const JPG={kb:0,pngkb:0};
+const b64kb=u=>Math.round((u.length-u.indexOf(',')-1)*3/4/102.4)/10;
+JPG.pngkb=b64kb(SRC.toDataURL('image/png'));
+let jt=null;
+function updJpeg(){
+  const q=S.set.jq; $('#jq').value=q; $('#jqVal').textContent=q+'%';
+  clearTimeout(jt); jt=setTimeout(()=>{
+    const url=SRC.toDataURL('image/jpeg',q/100); JPG.kb=b64kb(url);
+    const img=$('#jpgImg'); img.onload=()=>{ const z=$('#cvZoom').getContext('2d'); z.imageSmoothingEnabled=false; z.clearRect(0,0,240,160); z.drawImage(img,72,48,60,40,0,0,240,160); };
+    img.src=url;
+    $('#jpgCap').textContent=`JPEG at quality ${q}%: ${JPG.kb} KB`;
+    const max=450;
+    const row=(lab,kb,cls)=>`<div class="row"><span>${lab}</span><span class="bar"><i class="${cls}" style="width:${Math.max(.6,kb/max*100)}%"></i></span><span class="n">${kb} KB</span></div>`;
+    $('#sizebar').innerHTML=row('Uncompressed',450,'raw')+row('PNG (lossless)',JPG.pngkb,'png')+row(`JPEG at ${q}%`,JPG.kb,'');
+  },40);
+}
+$('#jq').oninput=e=>{S.set.jq=+e.target.value;updJpeg();save();};
+
+/* ---------- hero ---------- */
+const HQ=[[.92,'Quality 92%'],[.45,'45%'],[.15,'15%'],[.03,'3%']];
+let heroImgs=null;
+function drawHero(){
+  const c=$('#hero'); const {x,w,h}=setup(c); const P=cssPal();
+  const ph=h-28;
+  if(!heroImgs){
+    const src=document.createElement('canvas'); src.width=Math.round(w); src.height=Math.round(ph); drawScene(src.getContext('2d'),src.width,src.height);
+    heroImgs=HQ.map(([q])=>{ const u=src.toDataURL('image/jpeg',q); const im=new Image(); im.onload=drawHero; im.src=u; return {im,kb:b64kb(u)}; });
+    heroImgs.w=w;
+    return;
+  }
+  const bw=w/HQ.length;
+  heroImgs.forEach((o,i)=>{ if(o.im.complete&&o.im.naturalWidth) x.drawImage(o.im,i*bw,0,bw,ph,i*bw,0,bw,ph); });
+  x.fillStyle=P.soft; x.font='14px "Atkinson Hyperlegible", system-ui, sans-serif';
+  heroImgs.forEach((o,i)=>{ x.textAlign='left'; x.fillText(`${HQ[i][1]}: ${o.kb} KB`,i*bw+4,h-8); if(i){ x.fillStyle=P.surface; x.fillRect(i*bw-1,0,2,ph); x.fillStyle=P.soft; } });
+}
+
+/* ---------- audio ---------- */
+let AC=null; const live=new Set();
+function ctx(){ if(!AC){ const C=window.AudioContext||window.webkitAudioContext; if(!C) return null; AC=new C(); } if(AC.state==='suspended') AC.resume(); return AC; }
+function stopAll(){ live.forEach(n=>{try{n.stop();}catch(e){}}); live.clear(); document.querySelectorAll('#tones button').forEach(b=>b.classList.remove('playing')); $('#maskState').textContent='Nothing playing.'; maskOn={beeps:false,noise:false}; }
+(function(){
+  const box=$('#tones');
+  TONES.forEach(f=>{ const b=document.createElement('button'); b.type='button'; b.className='btn secondary'; b.textContent=fmt(f)+' Hz';
+    b.onclick=()=>{ const ac=ctx(); if(!ac) return; stopAll(); const o=ac.createOscillator(), g=ac.createGain(); o.frequency.value=f; const t=ac.currentTime; g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(.08,t+.05); g.gain.setValueAtTime(.08,t+1.2); g.gain.linearRampToValueAtTime(0,t+1.3); o.connect(g).connect(ac.destination); o.start(); o.stop(t+1.35); live.add(o); b.classList.add('playing'); o.onended=()=>{b.classList.remove('playing'); live.delete(o);}; };
+    box.appendChild(b); });
+})();
+let maskOn={beeps:false,noise:false};
+function startBeeps(){
+  const ac=ctx(); if(!ac) return; const o=ac.createOscillator(), g=ac.createGain(); o.frequency.value=1000; g.gain.value=0;
+  const t=ac.currentTime; for(let i=0;i<120;i++){ g.gain.setValueAtTime(.012,t+i*.5); g.gain.setValueAtTime(0,t+i*.5+.18); }
+  o.connect(g).connect(ac.destination); o.start(); o.stop(t+60); live.add(o); maskOn.beeps=true;
+}
+function startNoise(){
+  const ac=ctx(); if(!ac) return; const len=ac.sampleRate*2, buf=ac.createBuffer(1,len,ac.sampleRate), d=buf.getChannelData(0); for(let i=0;i<len;i++) d[i]=Math.random()*2-1;
+  const s=ac.createBufferSource(); s.buffer=buf; s.loop=true; const bp=ac.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=1000; bp.Q.value=1.4; const g=ac.createGain(); g.gain.value=.55;
+  s.connect(bp).connect(g).connect(ac.destination); s.start(); live.add(s); maskOn.noise=true;
+}
+function maskLabel(){ $('#maskState').textContent=maskOn.beeps&&maskOn.noise?'Playing: quiet beeps + loud hiss. Can you still pick out the beeps?':maskOn.beeps?'Playing: quiet beeps only. Listen to the rhythm, then add the hiss.':maskOn.noise?'Playing: loud hiss only.':'Nothing playing.'; }
+$('#beepBtn').onclick=()=>{ stopAll(); startBeeps(); maskLabel(); };
+$('#noiseBtn').onclick=()=>{ if(maskOn.noise) return; if(!maskOn.beeps) startBeeps(); startNoise(); maskLabel(); };
+$('#maskStop').onclick=stopAll;
+const NOTES=[[523.25,.4],[523.25,.4],[783.99,.4],[783.99,.4],[880,.4],[880,.4],[783.99,.8]];
+let melBuf=null;
+function melody(ac){
+  if(melBuf&&melBuf.sampleRate===ac.sampleRate) return melBuf;
+  const sr=ac.sampleRate, N=Math.floor(sr*3.2), b=ac.createBuffer(1,N,sr), out=b.getChannelData(0); let t0=0;
+  NOTES.forEach(([f,d])=>{ const st=Math.floor(t0*sr), len=Math.floor(d*sr); for(let i=0;i<len&&st+i<N;i++){ const t=i/sr; let env=Math.min(1,t/.008)*Math.exp(-2.6*t/d); const rel=(len-i)/sr; if(rel<.02) env*=rel/.02; let s=0; for(let k=1;k<=14;k++){ if(f*k<sr/2) s+=Math.sin(2*Math.PI*f*k*t)/k; } out[st+i]+=s*env; } t0+=d; });
+  let m=0; for(let i=0;i<N;i++) m=Math.max(m,Math.abs(out[i])); for(let i=0;i<N;i++) out[i]=out[i]/m*.9;
+  melBuf=b; return b;
+}
+$('#playMel').onclick=()=>{ const ac=ctx(); if(!ac) return; stopAll(); const s=ac.createBufferSource(); s.buffer=melody(ac); const lp=ac.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=Math.min(+S.set.cutoff,ac.sampleRate/2-100); lp.Q.value=.7; const lp2=ac.createBiquadFilter(); lp2.type='lowpass'; lp2.frequency.value=lp.frequency.value; lp2.Q.value=.7; const g=ac.createGain(); g.gain.value=.3; s.connect(lp).connect(lp2).connect(g).connect(ac.destination); s.start(); live.add(s); };
+$('#stopMel').onclick=stopAll;
+$('#cutoff').value=S.set.cutoff; $('#cutoff').onchange=e=>{S.set.cutoff=e.target.value;save();};
+
+/* ---------- video ---------- */
+const VW=480,VH=270,BS=30,BX=16,BY=9;
+const VB=document.createElement('canvas'); VB.width=VW; VB.height=VH; const vbx=VB.getContext('2d');
+const BG=document.createElement('canvas'); BG.width=VW; BG.height=VH; drawScene(BG.getContext('2d'),VW,VH);
+const PAN=document.createElement('canvas'); PAN.width=VW*3; PAN.height=VH; drawScene(PAN.getContext('2d'),VW*3,VH);
+let vt=0, vPrev=null, vPaused=false, vStats={changed:0,avg:0,n:0}, vLast=0;
+const CONF=Array.from({length:200},(_,i)=>{const r=rng(500+i);return {x:r()*VW,y:r()*VH,vx:(r()-.5)*7,vy:1.5+r()*3.5,c:['#e63946','#ffd166','#2a9d8f','#f1faee','#8ecae6'][i%5],s:4+r()*5};});
+function renderFrame(){
+  const s=S.set.scene;
+  if(s==='pan'){ const span=VW*2, o=(vt*9)%(span*2), off=o<=span?o:span*2-o; vbx.drawImage(PAN,off,0,VW,VH,0,0,VW,VH); }
+  else vbx.drawImage(BG,0,0);
+  if(s==='ball'){ const px=60+((vt*7)%720); const xx=px<=420?px:840-px; const yy=VH*.82-Math.abs(Math.sin(vt*.22))*VH*.55; vbx.fillStyle='#f1faee'; vbx.beginPath(); vbx.arc(xx,yy,14,0,Math.PI*2); vbx.fill(); vbx.fillStyle='#e63946'; vbx.beginPath(); vbx.arc(xx,yy,14,Math.PI*.15,Math.PI*1.15); vbx.fill(); }
+  if(s==='confetti'){ CONF.forEach(p=>{ const X=((p.x+p.vx*vt)%VW+VW)%VW, Y=((p.y+p.vy*vt)%VH+VH)%VH; vbx.fillStyle=p.c; vbx.save(); vbx.translate(X,Y); vbx.rotate(vt*.3+p.x); vbx.fillRect(-p.s/2,-p.s/3,p.s,p.s*.66); vbx.restore(); }); }
+}
+function vidTick(now){
+  requestAnimationFrame(vidTick);
+  if(vPaused||now-vLast<1000/12) return; vLast=now;
+  const sec=$('#video'); const r=sec.getBoundingClientRect(); if(r.bottom<0||r.top>innerHeight) return;
+  renderFrame(); vt++;
+  const cur=vbx.getImageData(0,0,VW,VH).data; const changed=[];
+  for(let by=0;by<BY;by++) for(let bx=0;bx<BX;bx++){
+    let diff=0; if(vPrev){ for(let y=by*BS;y<by*BS+BS;y+=3) for(let x=bx*BS;x<bx*BS+BS;x+=3){ const i=(y*VW+x)*4; diff+=Math.abs(cur[i]-vPrev[i])+Math.abs(cur[i+1]-vPrev[i+1])+Math.abs(cur[i+2]-vPrev[i+2]); } }
+    changed.push(!vPrev||diff>300);
+  }
+  vPrev=cur;
+  const c=$('#cvVid').getContext('2d'); c.drawImage(VB,0,0);
+  const n=changed.filter(Boolean).length;
+  if($('#vidGrid').checked){ const P=cssPal(); c.strokeStyle='rgba(255,255,255,.18)'; c.lineWidth=1; for(let i=0;i<=BX;i++){c.beginPath();c.moveTo(i*BS,0);c.lineTo(i*BS,VH);c.stroke();} for(let i=0;i<=BY;i++){c.beginPath();c.moveTo(0,i*BS);c.lineTo(VW,i*BS);c.stroke();}
+    changed.forEach((ch,k)=>{ if(!ch) return; const bx=k%BX, by=(k/BX)|0; c.fillStyle='rgba(106,63,181,.45)'; c.fillRect(bx*BS,by*BS,BS,BS); c.strokeStyle='#b08cff'; c.lineWidth=2; c.strokeRect(bx*BS+1,by*BS+1,BS-2,BS-2); }); }
+  vStats.n=Math.min(vStats.n+1,24); vStats.avg+=(n-vStats.avg)/vStats.n;
+  const pct=Math.round(vStats.avg/144*100);
+  $('#vidReadout').innerHTML=`<span class="chip">This frame: ${n} of 144 blocks changed</span><span class="chip ${pct<25?'ok':pct>70?'bad':''}">Average: about ${pct}% of a full frame to store</span>`;
+}
+function setScene(s){ S.set.scene=s; vPrev=null; vStats={changed:0,avg:0,n:0}; vt=0; document.querySelectorAll('#scenes button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.s===s)); save(); }
+document.querySelectorAll('#scenes button').forEach(b=>b.onclick=()=>setScene(b.dataset.s));
+$('#vidPause').onclick=()=>{ vPaused=!vPaused; $('#vidPause').textContent=vPaused?'Play':'Pause'; };
+
+
+/* ---------- lossy text ---------- */
+function lossyWord(w){ return w.replace(/^([^A-Za-z]*[A-Za-z])(.*)$/,(m,a,b)=>a+b.replace(/[aeiouAEIOU]/g,'')); }
+function updLossyText(){
+  const t=S.set.ltext||''; const out=t.split(/(\s+)/).map(p=>/\s/.test(p)?p:lossyWord(p)).join('');
+  $('#lout').textContent=out||'(type something above)';
+  const a=Array.from(t).length, b=Array.from(out).length, pct=a?Math.round((1-b/a)*1000)/10:0;
+  $('#lread').innerHTML=`<span class="chip">Original: ${a} characters</span><span class="chip">Compressed: ${b} characters</span><span class="chip ok">${pct}% smaller</span>`;
+}
+$('#ltext').value=S.set.ltext; $('#ltext').oninput=e=>{S.set.ltext=e.target.value;updLossyText();save();};
+
+/* ---------- brightness / chroma views ---------- */
+const FLAT=new Float32Array(NPX).fill(128);
+function updView(){
+  const v=S.set.view; document.querySelectorAll('#views button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.v===v));
+  const c=$('#cvView').getContext('2d');
+  if(v==='orig') c.putImageData(SRCDATA,0,0);
+  else if(v==='bright') c.putImageData(recombine(YC,FLAT,FLAT),0,0);
+  else c.putImageData(recombine(FLAT,CB,CR),0,0);
+}
+document.querySelectorAll('#views button').forEach(b=>b.onclick=()=>{S.set.view=b.dataset.v;updView();save();});
+(function(){
+  const X0=87, Y0=86, col=(cb,cr)=>{ const y=128,b=cb-128,r=cr-128; const R=y+1.402*r, G=y-.344136*b-.714136*r, B=y+1.772*b; const f=v=>Math.max(0,Math.min(255,Math.round(v))); return `rgb(${f(R)},${f(G)},${f(B)})`; };
+  const p=(x,y)=>(Y0+y)*W+(X0+x);
+  let h16='', h4='';
+  for(let y=0;y<2;y++) for(let x=0;x<8;x++){ const i=p(x,y); h16+=`<i style="background:${col(CB[i],CR[i])}"></i>`; }
+  const avg=[]; for(let bx=0;bx<4;bx++){ let cb=0,cr=0; for(let y=0;y<2;y++) for(let x=0;x<2;x++){ const i=p(bx*2+x,y); cb+=CB[i]; cr+=CR[i]; } avg.push([cb/4,cr/4]); }
+  for(let y=0;y<2;y++) for(let x=0;x<8;x++){ const [cb,cr]=avg[x>>1]; h4+=`<i style="background:${col(cb,cr)}"></i>`; }
+  $('#sw16').innerHTML=h16; $('#sw4').innerHTML=h4;
+})();
+
+/* ---------- temporal masking ---------- */
+function drumAt(ac,t){
+  const len=Math.floor(ac.sampleRate*.35), buf=ac.createBuffer(1,len,ac.sampleRate), d=buf.getChannelData(0);
+  for(let i=0;i<len;i++){ const tt=i/ac.sampleRate; d[i]=(Math.random()*2-1)*Math.exp(-tt/.045)*.8+Math.sin(2*Math.PI*90*tt)*Math.exp(-tt/.09)*.6; }
+  const s=ac.createBufferSource(); s.buffer=buf; const g=ac.createGain(); g.gain.value=.75; s.connect(g).connect(ac.destination); s.start(t); live.add(s);
+}
+function tickAt(ac,t){
+  const o=ac.createOscillator(), g=ac.createGain(); o.frequency.value=1500; g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(.03,t+.003); g.gain.setValueAtTime(.03,t+.012); g.gain.linearRampToValueAtTime(0,t+.018);
+  o.connect(g).connect(ac.destination); o.start(t); o.stop(t+.03); live.add(o);
+}
+$('#tdelay').value=S.set.tdelay; $('#tdelay').onchange=e=>{S.set.tdelay=e.target.value;save();};
+$('#playDrum').onclick=()=>{ const ac=ctx(); if(!ac) return; stopAll(); const t0=ac.currentTime+.25; drumAt(ac,t0); tickAt(ac,t0+(+S.set.tdelay)/1000); };
+$('#playTick').onclick=()=>{ const ac=ctx(); if(!ac) return; stopAll(); const t0=ac.currentTime+.1; tickAt(ac,t0); tickAt(ac,t0+.6); };
+
+/* ---------- identity + progress ---------- */
+const nameEl=$('#name'), perEl=$('#period');
+nameEl.value=S.name; perEl.value=S.period;
+nameEl.oninput=()=>{S.name=nameEl.value;save();};
+perEl.oninput=()=>{S.period=perEl.value;save();};
+function secDone(i){ return ORDER.filter(id=>Q[id].sec===i).every(isDone); }
+function scoreInfo(){ const auto=ORDER.filter(id=>Q[id].auto); return {n:auto.filter(id=>(S.ans[id]||{}).correct).length,total:auto.length}; }
+function updateProgress(){
+  $('#who').textContent=S.name.trim()?`${S.name.trim()}${S.period.trim()?' · Period '+S.period.trim():''}`:'Lossy compression';
+  document.querySelectorAll('.progress a[data-sec]').forEach(a=>a.classList.toggle('done',secDone(+a.dataset.sec)));
+  $('#checklist').innerHTML=SECTIONS.map((s,i)=>`<li class="${secDone(i)?'done':''}"><span class="mark">${secDone(i)?'✓':i+1}</span>${esc(s)}${secDone(i)?'':' <span class="muted small">(not finished)</span>'}</li>`).join('');
+  const sc=scoreInfo(); $('#scoreLine').textContent=`Auto-checked questions correct: ${sc.n} of ${sc.total}.`;
+}
+
+
+/* ---------- recap ---------- */
+const KEY_IDEAS=[
+  'Lossy compression permanently discards less important information, so files get much smaller, but the original can’t be rebuilt exactly. Text, code, and data use lossless compression because losing information would change the meaning.',
+  'Images (JPEG): split brightness from color, average the color over small blocks (chroma subsampling), and simplify fine brightness detail with the discrete cosine transform (DCT). Eyes notice brightness more than color.',
+  'Audio (MP3): perceptual audio coding removes sounds people can’t hear, such as very high frequencies, quiet sounds hidden by loud ones (simultaneous masking), and sounds just before or after a sudden loud one (temporal masking).',
+  'Video (MP4): store full frames now and then, and otherwise store only what changed between frames. Fast motion needs much more data.',
+  'Higher compression means a smaller file and lower quality. Choose the setting based on the use case.'
+];
+function snapCanvas(cv,w,h){ const c=document.createElement('canvas'); c.width=w; c.height=h; c.getContext('2d').drawImage(cv,0,0,w,h); return c.toDataURL('image/jpeg',.85); }
+function qa(id){ return {type:'qa',p:promptText(id),a:answerText(id),r:resultText(id)}; }
+function buildBlocks(){
+  const B=[{type:'ideas'}];
+  SECTIONS.forEach((title,i)=>{
+    B.push({type:'h',t:`${i+1}. ${title}`});
+    if(i===1){ const f=BLURS[S.set.blur]; B.push({type:'img',src:snapCanvas($('#cvChromaA'),360,240),pw:240,ph:160,cap:`Color averaged over ${f} x ${f} blocks, brightness kept.`}); }
+    if(i===1&&S.ans.jpeg_low&&S.ans.jpeg_low.value!=null){ const c=document.createElement('canvas'); c.width=360; c.height=240; const im=$('#jpgImg'); try{ c.getContext('2d').drawImage(im,0,0,360,240); B.push({type:'img',src:c.toDataURL('image/jpeg',.9),pw:240,ph:160,cap:`The JPEG at the quality you last viewed (${S.set.jq}%).`}); }catch(e){} }
+    ORDER.filter(id=>Q[id].sec===i).forEach(id=>B.push(qa(id)));
+  });
+  return B;
+}
+function renderRecap(B){
+  const sc=scoreInfo(), d=new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+  let h=`<h4>Lossy compression</h4><div>${esc(S.name.trim()||'(name missing)')}${S.period.trim()?' · Period '+esc(S.period.trim()):''} · ${d}</div><div class="cap">Auto-checked questions correct: ${sc.n} of ${sc.total}</div>`;
+  B.forEach(b=>{
+    if(b.type==='ideas') h+=`<h5>Key ideas</h5><ul>${KEY_IDEAS.map(k=>`<li>${esc(k)}</li>`).join('')}</ul>`;
+    else if(b.type==='h') h+=`<h5>${esc(b.t)}</h5>`;
+    else if(b.type==='img') h+=`<img src="${b.src}" alt="" style="max-width:360px"><div class="cap">${esc(b.cap)}</div>`;
+    else h+=`<div class="qa"><div class="p">${esc(b.p)}</div><div class="a">${esc(b.a)}</div>${b.r?`<div class="r">${esc(b.r)}</div>`:''}</div>`;
+  });
+  $('#recap').innerHTML=h;
+}
+const clean=s=>String(s).replace(/[’‘]/g,"'").replace(/[“”]/g,'"').replace(/[–—−]/g,'-').replace(/×/g,'x').replace(/÷/g,'/').replace(/…/g,'...').replace(/→/g,'->').replace(/␣/g,'space').replace(/·/g,'-').replace(/[^\x09\x0A\x0D\x20-\x7E\xA0-\xFF]/g,'');
+function buildPDF(B){
+  const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:'pt',format:'letter'});
+  const W=612,H=792,M=54,CW=W-2*M; let y=M;
+  const need=hh=>{ if(y+hh>H-M){ doc.addPage(); y=M; } };
+  const txt=(s,{size=10.5,bold=false,color=[24,35,61],indent=0,gap=3}={})=>{
+    doc.setFont('helvetica',bold?'bold':'normal'); doc.setFontSize(size); doc.setTextColor(...color);
+    const lh=size*1.38;
+    clean(s).split('\n').forEach(par=>{ doc.splitTextToSize(par||' ',CW-indent).forEach(ln=>{ need(lh); doc.text(ln,M+indent,y+size); y+=lh; }); });
+    y+=gap;
+  };
+  const rule=()=>{ need(10); doc.setDrawColor(195,207,223); doc.setLineWidth(.8); doc.line(M,y+4,W-M,y+4); y+=12; };
+  const sc=scoreInfo(), d=new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+  txt('Lossy compression',{size:20,bold:true,gap:2});
+  txt(`${S.name.trim()}${S.period.trim()?'   |   Period '+S.period.trim():''}   |   ${d}`,{size:11,gap:1});
+  txt(`Auto-checked questions correct: ${sc.n} of ${sc.total}`,{size:10,color:[74,88,120],gap:6});
+  B.forEach(b=>{
+    if(b.type==='ideas'){ rule(); txt('Key ideas',{size:13,bold:true,gap:4}); KEY_IDEAS.forEach(k=>txt('-  '+k,{indent:8,gap:4})); }
+    else if(b.type==='h'){ y+=6; rule(); txt(b.t,{size:13,bold:true,gap:4}); }
+    else if(b.type==='img'){ const iw=b.pw||170, ih=b.ph||170; need(ih+24); doc.addImage(b.src,b.src.startsWith('data:image/jpeg')?'JPEG':'PNG',M,y,iw,ih); y+=ih+4; txt(b.cap,{size:9,color:[74,88,120],gap:6}); }
+    else { txt(b.p,{bold:true,gap:1}); txt(b.a,{indent:12,gap:b.r?1:6}); if(b.r) txt(b.r,{indent:12,size:9,color:[74,88,120],gap:6}); }
+  });
+  const n=doc.getNumberOfPages();
+  for(let i=1;i<=n;i++){ doc.setPage(i); doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(120,130,150); doc.text(clean(`${S.name.trim()} - Lossy compression - page ${i} of ${n}`),M,H-28); }
+  return doc;
+}
+const status=s=>{$('#status').textContent=s;};
+const dlCap=(window.claude&&typeof window.claude.use==='function')?window.claude.use('downloads').catch(()=>null):Promise.resolve(null);
+function needName(){ if(S.name.trim()) return false; status('Add your name at the top of the page first.'); nameEl.scrollIntoView({behavior:reduce?'auto':'smooth',block:'center'}); setTimeout(()=>nameEl.focus({preventScroll:true}),400); return true; }
+$('#dlPdf').onclick=async()=>{
+  if(needName()) return;
+  const B=buildBlocks(); renderRecap(B);
+  if(!window.jspdf){ status('The PDF tool didn’t load. Use “Print or save as PDF” instead.'); return; }
+  let doc; try{ doc=buildPDF(B); }catch(e){ status('Something went wrong building the PDF. Use “Print or save as PDF” instead.'); return; }
+  const fname=(S.name.trim().replace(/[^\w\- ]+/g,'').replace(/\s+/g,'_')||'student')+'_Lossy_Compression.pdf';
+  status('Preparing your PDF…');
+  const dl=await dlCap;
+  if(dl){
+    try{ await dl.save({filename:fname,data:doc.output('blob')}); status('Saved. Upload the PDF to your Canvas assignment.'); return; }
+    catch(e){ const c=e&&e.code; if(c==='declined'){status('Download canceled. Click Download PDF to try again.');return;} if(c==='rate_limited'){status('A save prompt is already open.');return;} }
+  }
+  try{ doc.save(fname); status('Your PDF should be in your downloads. If nothing appeared, use “Print or save as PDF.”'); }
+  catch(e){ status('Downloading isn’t available here. Use “Print or save as PDF” instead.'); }
+};
+$('#printPdf').onclick=async()=>{
+  if(needName()) return;
+  renderRecap(buildBlocks());
+  await Promise.all([...document.querySelectorAll('#recap img')].map(i=>i.decode?i.decode().catch(()=>{}):null));
+  try{ window.print(); status('In the print window, choose “Save as PDF” as the destination.'); }
+  catch(e){ status('Printing isn’t available here. Use Download PDF instead.'); }
+};
+let resetArmed=false;
+$('#reset').onclick=()=>{
+  if(!resetArmed){ resetArmed=true; $('#reset').textContent='Click again to erase everything'; setTimeout(()=>{resetArmed=false;$('#reset').textContent='Erase my answers and start over';},4000); return; }
+  try{localStorage.removeItem(STORE);}catch(e){} location.reload();
+};
+
+
+/* ---------- init ---------- */
+function drawAll(){ heroImgs=null; drawHero(); }
+updateProgress(); updLossyText(); updView(); updChroma(); updJpeg(); setScene(S.set.scene); drawAll(); requestAnimationFrame(vidTick);
+document.querySelectorAll('[data-q="jpeg_low"]').forEach(el=>renderRec(el,'jpeg_low',Q.jpeg_low));
+if('IntersectionObserver' in window){ new IntersectionObserver(es=>{ if(es.some(e=>e.isIntersecting)) renderRecap(buildBlocks()); },{rootMargin:'200px'}).observe($('#recap-section')); }
+else renderRecap(buildBlocks());
+let rt=null, lastW=innerWidth; window.addEventListener('resize',()=>{ if(innerWidth===lastW) return; lastW=innerWidth; clearTimeout(rt); rt=setTimeout(drawAll,150);});
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',drawAll);
+if(document.fonts&&document.fonts.ready) document.fonts.ready.then(drawAll);
+})();
+</script>
+</body>
+</html>
