@@ -290,7 +290,7 @@ svg.tm{display:block;width:100%;height:auto;max-width:640px;margin:0 auto}
     <div class="q" data-q="what_mc"></div>
 
     <h3>Could text be lossy?</h3>
-    <p>Here’s one way to make text smaller by throwing information away: <strong>keep the first letter of each word, then delete every other vowel</strong>. Type your own text and see how readable it stays.</p>
+    <p>Here’s one way to make text smaller by throwing information away: <strong>keep the first letter of each word, then delete the rest of its vowels</strong>. Type your own text and see how readable it stays.</p>
     <div class="lab">
       <div style="padding:16px"><label class="field">Your text<textarea id="ltext" style="min-height:80px"></textarea></label></div>
       <div style="padding:0 16px 16px"><p class="panel-title">Compressed</p><div class="ctext" id="lout" style="min-height:60px"></div></div>
@@ -341,7 +341,7 @@ svg.tm{display:block;width:100%;height:auto;max-width:640px;margin:0 auto}
     <h3>How JPEG does it</h3>
     <p>JPEG combines chroma subsampling with a second trick: a math process called the <strong>discrete cosine transform (DCT)</strong> that finds fine brightness details the eye barely notices so they can be simplified or dropped. Then the results are stored with fewer bits.</p>
     <div class="q" data-q="jpeg_steps"></div>
-    <p>When you save a JPEG you pick a <strong>quality</strong>. In Khan Academy’s example, a 400 × 300 photo of a cat in a hat took 169 KB at 100% quality, 48 KB at 60%, and only 12 KB at 1%, where the green of the eyes started smearing into the fur. This page runs real JPEG compression in your browser, so you can try it yourself. The close-up shows a small patch blown up.</p>
+    <p>When you save a JPEG you pick a <strong>quality</strong>. Lower quality means a smaller file, but more detail gets thrown away. This page runs real JPEG compression in your browser, so you can try it yourself. The close-up shows a small patch blown up.</p>
     <div class="lab">
       <div class="imgpair">
         <figure><img id="jpgImg" alt="The picture after JPEG compression at the chosen quality"><figcaption id="jpgCap">JPEG</figcaption></figure>
@@ -451,7 +451,7 @@ svg.tm{display:block;width:100%;height:auto;max-width:640px;margin:0 auto}
   <section class="step" id="tradeoff">
     <div class="step-head"><span class="step-no">5</span><h2>Quality vs. size</h2></div>
     <p>With lossless compression, we can always rebuild 100% of the original. With lossy compression, we lose some percentage of the data: maybe 5%, maybe 10%, maybe 70%. How much to lose depends on the <strong>use case</strong>.</p>
-    <p>Khan’s cat photo is a good example. Projected on a big screen for a presentation, it deserves as much detail as possible: lossless PNG, or JPEG at 100%. On a website for people with slow connections, a smaller file loads faster, so a lower quality is the better choice.</p>
+    <p>Think about one photo used two ways. Projected on a big screen for a presentation, it deserves as much detail as possible: lossless PNG, or JPEG at 100%. On a website for people with slow connections, a smaller file loads faster, so a lower quality is the better choice.</p>
     <div class="q" data-q="cloze"></div>
     <div class="q" data-q="ftable"></div>
     <h3>Which matters more?</h3>
@@ -487,7 +487,6 @@ svg.tm{display:block;width:100%;height:auto;max-width:640px;margin:0 auto}
     <h3>Reflect</h3>
     <div class="q" data-q="refl_text"></div>
     <div class="q" data-q="refl_surprise"></div>
-    <div class="keyidea"><strong>Last step</strong><p>Complete Khan Academy’s <a href="https://www.khanacademy.org/computing/ap-computer-science-principles/x2d2f703b37b450a3:digital-information/x2d2f703b37b450a3:data-compression/e/lossy-vs-lossless-compression" target="_blank" rel="noopener" style="color:inherit">Lossy vs. lossless compression practice</a> while signed in to your class account.</p></div>
   </section>
 
   <!-- recap -->
@@ -564,7 +563,7 @@ const Q={
   jpeg_low:{sec:1,type:'rec',prompt:'Drag the JPEG quality down. What’s the lowest quality where the full picture (not the close-up) still looks fine to you? Your setting and file size are recorded.'},
   jpeg_mc:{sec:1,type:'mc',auto:true,prompt:'Set the quality to 5 and look at the close-up. What has the compression done?',
     options:['Made the picture sharper','Added visible square blocks and smeared color along edges','Turned the picture black and white','Nothing; JPEG is lossless'],answer:1,
-    explain:'JPEG works on small square blocks and stores color in less detail. At low quality those blocks and smears show, like the cat’s green eyes smearing into its fur at 1%.'},
+    explain:'JPEG works on small square blocks and stores color in less detail. At low quality those blocks and color smears become easy to see.'},
   hear_top:{sec:2,type:'select',prompt:'What’s the highest tone you could hear?',options:['1,000 Hz','8,000 Hz','12,000 Hz','14,000 Hz','15,000 Hz','16,000 Hz','17,000 Hz','18,000 Hz','19,000 Hz','I couldn’t hear any']},
   mask_mc:{sec:2,type:'mc',auto:true,prompt:'What happened to the quiet beeps when the loud hiss played?',
     options:['They got louder.','They were hidden by the hiss, even though they were still playing.','They changed pitch.','They stopped playing.'],answer:1,
