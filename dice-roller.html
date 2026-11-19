@@ -1,0 +1,1446 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dice Roller Build Guide</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a slate "dice tray" header holding the function map, then one reading column; the build is one function per view. */
+:root {
+  --bg: #f2f3f7;
+  --surface: #ffffff;
+  --surface-2: #e8eaf1;
+  --ink: #1b1e2b;
+  --muted: #586074;
+  --line: #d6d9e3;
+  --accent: #2854c5;
+  --accent-ink: #ffffff;
+  --slate: #2d303c;
+  --slate-ink: #eef0f6;
+  --slate-muted: #a9aec0;
+  --code-bg: #23262f;
+  --code-ink: #e6e8ef;
+  --ok: #2b7a2f;
+  --ok-bg: #e5f3e5;
+  --bad: #ad2a1f;
+  --bad-bg: #fbe7e4;
+  --note-bg: #eef2fd;
+  --font-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --d4: #4f9f51; --d6: #5bbdd0; --d8: #883bde; --d10: #cf4391; --d12: #c84031; --d20: #e3752d; --dgrey: #545454; --dblue: #2854c5;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #13151c; --surface: #1b1e28; --surface-2: #262a37; --ink: #e7e9f1; --muted: #a2a8ba; --line: #353a4a;
+    --accent: #86a2ff; --accent-ink: #10142a; --slate: #262934; --code-bg: #0f1117; --code-ink: #e6e8ef;
+    --ok: #86d08a; --ok-bg: #1b2e1d; --bad: #ff9a8f; --bad-bg: #3a1d1a; --note-bg: #1d2336;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #13151c; --surface: #1b1e28; --surface-2: #262a37; --ink: #e7e9f1; --muted: #a2a8ba; --line: #353a4a;
+  --accent: #86a2ff; --accent-ink: #10142a; --slate: #262934; --code-bg: #0f1117; --code-ink: #e6e8ef;
+  --ok: #86d08a; --ok-bg: #1b2e1d; --bad: #ff9a8f; --bad-bg: #3a1d1a; --note-bg: #1d2336;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+img { max-width: 100%; }
+.home-link { display: inline-block; color: var(--slate-muted); font-size: 0.9rem; font-weight: 600; margin-bottom: 14px; }
+.home-link:hover { color: var(--slate-ink); }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 16px; line-height: 1.6; }
+.wrap { max-width: 880px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3, h4 { font-family: var(--font-display); line-height: 1.15; text-wrap: balance; margin: 0; }
+h2 { font-size: clamp(1.5rem, 3.2vw, 2rem); font-weight: 800; letter-spacing: -0.01em; }
+h3 { font-size: 1.35rem; font-weight: 800; }
+h4 { font-size: 1.05rem; font-weight: 600; }
+p { margin: 0; }
+a { color: var(--accent); }
+code, pre, .mono { font-family: var(--font-mono); }
+:not(pre) > code { background: var(--surface-2); padding: 0.08em 0.35em; border-radius: 4px; font-size: 0.88em; }
+button { font: inherit; cursor: pointer; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.eyebrow { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+
+/* Header tray */
+.tray { background: var(--slate); color: var(--slate-ink); padding-block: 40px 28px; }
+.tray .eyebrow { color: var(--slate-muted); }
+.tray h1 { font-size: clamp(2.1rem, 6vw, 3.4rem); font-weight: 800; letter-spacing: -0.02em; margin-top: 8px; }
+.tray .lede { color: var(--slate-ink); opacity: 0.9; max-width: 62ch; margin-top: 12px; font-size: 1.05rem; }
+.tray-links { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.tray-links a { color: var(--slate-ink); text-decoration: none; border: 1px solid #50566a; border-radius: 999px; padding: 6px 14px; font-weight: 600; font-size: 0.9rem; }
+.tray-links a:hover { background: #3a3e4d; }
+.map-box { margin-top: 26px; background: #22252f; border-radius: 14px; padding: 16px 14px 10px; }
+.map-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; padding: 0 4px 6px; }
+.map-head p { color: var(--slate-muted); font-size: 0.88rem; }
+.map-scroll { overflow-x: auto; }
+.map-scroll svg { display: block; min-width: 600px; width: 100%; height: auto; }
+.node { cursor: pointer; }
+.node rect { fill: #2f3340; stroke: #4a5064; stroke-width: 1.5; transition: stroke 0.15s, fill 0.15s; }
+.node text { fill: #eef0f6; font-family: var(--font-mono); font-size: 13px; }
+.node:hover rect, .node:focus-visible rect, .node.lit rect { fill: #3b4052; stroke: #eef0f6; }
+.node:focus { outline: none; }
+.edge { stroke: #5a6075; stroke-width: 1.6; fill: none; transition: stroke 0.15s, opacity 0.15s; }
+.edge.lit { stroke: #f4f5fa; stroke-width: 2.4; }
+svg.dim .edge:not(.lit) { opacity: 0.25; }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; color: var(--slate-muted); font-size: 0.8rem; padding: 8px 4px 2px; }
+
+/* Sections */
+main { padding-block: 36px 64px; }
+section.block { margin-bottom: 48px; display: grid; gap: 16px; }
+.intro-text { max-width: 65ch; color: var(--ink); }
+.muted { color: var(--muted); }
+ol.howto { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; counter-reset: how; }
+ol.howto li { counter-increment: how; display: grid; grid-template-columns: 36px 1fr; gap: 12px; align-items: start; }
+ol.howto li::before { content: counter(how); width: 30px; height: 30px; border-radius: 8px; background: var(--slate); color: #fff; display: grid; place-items: center; font-family: var(--font-display); font-weight: 800; }
+.filemap { background: var(--code-bg); color: var(--code-ink); border-radius: 10px; padding: 14px 16px; font-size: 0.86rem; overflow-x: auto; line-height: 1.7; }
+.filemap .hot { color: #f7c873; font-weight: 600; }
+.filemap .dim { color: #8a90a6; }
+
+.why-list { display: grid; gap: 0; border-top: 1px solid var(--line); }
+.why { display: grid; grid-template-columns: minmax(150px, 0.32fr) 1fr; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.why h4 { font-size: 1rem; }
+.why > div { min-width: 0; }
+@media (max-width: 560px) { .why { grid-template-columns: 1fr; gap: 4px; } }
+
+.concepts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 680px) { .concepts { grid-template-columns: 1fr; } }
+.concept { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px; display: grid; gap: 8px; align-content: start; }
+.concept .flow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-family: var(--font-mono); font-size: 0.85rem; margin: 4px 0; }
+.flow .chip { border: 1px solid var(--line); background: var(--surface-2); border-radius: 6px; padding: 3px 8px; }
+.flow .fn { background: var(--slate); color: #fff; border-color: var(--slate); }
+
+/* Stepper */
+.build-head { display: flex; justify-content: space-between; align-items: end; gap: 12px; flex-wrap: wrap; }
+.progress { font-size: 0.9rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.progress-bar { height: 6px; border-radius: 6px; background: var(--surface-2); overflow: hidden; margin-top: 6px; width: 200px; max-width: 100%; }
+.progress-bar span { display: block; height: 100%; background: var(--d4); width: 0; transition: width 0.3s; }
+.stepper { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.stepbtn { display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1.5px solid var(--line); border-radius: 10px; padding: 8px 10px; color: var(--ink); text-align: left; min-width: 0; }
+.stepbtn:hover { border-color: var(--muted); }
+.stepbtn[aria-current="step"] { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink) inset; }
+.stepbtn .lbl { font-family: var(--font-mono); font-size: 0.78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.stepbtn .done { margin-left: auto; color: var(--ok); font-weight: 700; flex-shrink: 0; }
+.die { flex-shrink: 0; display: block; }
+
+/* Step panel */
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: clamp(18px, 3.5vw, 32px); display: grid; gap: 28px; }
+.panel > * { min-width: 0; }
+.step-title { display: flex; gap: 16px; align-items: center; }
+.step-title h3 { font-family: var(--font-mono); font-weight: 600; font-size: clamp(1.1rem, 3vw, 1.5rem); word-break: break-word; }
+.step-title .job { margin-top: 4px; color: var(--muted); }
+.sig { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.sig > div { padding: 10px 12px; border-right: 1px solid var(--line); min-width: 0; }
+.sig > div:last-child { border-right: 0; }
+.sig dt { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.sig dd { margin: 4px 0 0; font-size: 0.88rem; }
+.sig .fnlink { font-family: var(--font-mono); font-size: 0.8rem; background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+@media (max-width: 680px) { .sig { grid-template-columns: repeat(2, minmax(0, 1fr)); } .sig > div:nth-child(2) { border-right: 0; } .sig > div:nth-child(-n+2) { border-bottom: 1px solid var(--line); } }
+.sub { display: grid; gap: 12px; }
+.sub > h4 { display: flex; align-items: center; gap: 8px; }
+.callout { background: var(--note-bg); border-radius: 10px; padding: 14px 16px; display: grid; gap: 6px; }
+.callout strong:first-child { font-family: var(--font-display); }
+.warn { background: var(--bad-bg); }
+
+pre.code { background: var(--code-bg); color: var(--code-ink); border-radius: 10px; padding: 14px 16px; margin: 0; overflow-x: auto; font-size: 0.85rem; line-height: 1.6; tab-size: 4; }
+.t-k { color: #f2a65a; } .t-s { color: #a5d98f; } .t-c { color: #8d93a8; font-style: italic; } .t-n { color: #f7c873; } .t-f { color: #8ab4ff; }
+
+.chunk { border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: grid; gap: 12px; }
+.chunk-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.chunk-head .n { font-family: var(--font-mono); font-size: 0.75rem; color: var(--muted); }
+.lines { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.lines li { display: grid; gap: 4px; }
+.lines li code { justify-self: start; max-width: 100%; overflow-x: auto; white-space: pre; background: var(--code-bg) !important; color: var(--code-ink); padding: 3px 8px !important; border-radius: 5px; font-size: 0.8rem !important; }
+.tryfirst { border-style: dashed; }
+.btn { border: 1.5px solid var(--ink); background: var(--ink); color: var(--bg); border-radius: 8px; padding: 8px 14px; font-weight: 600; font-size: 0.92rem; }
+.btn.ghost { background: transparent; color: var(--ink); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+details.full { border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
+details.full summary { cursor: pointer; font-weight: 600; }
+details.full[open] summary { margin-bottom: 10px; }
+
+.test { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.test-head { background: var(--surface-2); padding: 10px 14px; display: flex; justify-content: space-between; gap: 10px; align-items: center; flex-wrap: wrap; }
+.test-head strong { font-family: var(--font-display); }
+.copy { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 6px; padding: 4px 10px; font-size: 0.8rem; font-weight: 600; }
+.test-body { padding: 14px; display: grid; gap: 12px; }
+.test-body pre.code { font-size: 0.82rem; }
+.pa { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 620px) { .pa { grid-template-columns: 1fr; } }
+.pa label { font-size: 0.8rem; font-weight: 700; display: block; margin-bottom: 4px; }
+.pa textarea, .namefield { width: 100%; min-height: 96px; resize: vertical; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-family: var(--font-mono); font-size: 0.8rem; background: var(--bg); color: var(--ink); }
+.namefield { min-height: 0; font-family: var(--font-body); font-size: 0.95rem; }
+.expected { background: var(--ok-bg); border-radius: 8px; padding: 12px 14px; display: grid; gap: 8px; }
+.expected pre { margin: 0; font-size: 0.8rem; white-space: pre-wrap; background: var(--surface); color: var(--ink); padding: 8px 10px; border-radius: 6px; overflow-x: auto; }
+
+.mcq { display: grid; gap: 8px; }
+.mcq .opt { text-align: left; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 8px; padding: 10px 12px; }
+.mcq .opt:hover { border-color: var(--muted); }
+.mcq .opt.right { border-color: var(--ok); background: var(--ok-bg); }
+.mcq .opt.wrong { border-color: var(--bad); background: var(--bad-bg); }
+.feedback { border-radius: 8px; padding: 10px 12px; background: var(--surface-2); }
+
+.bigpic { background: var(--slate); color: var(--slate-ink); border-radius: 12px; padding: 16px 18px; display: grid; gap: 6px; }
+.bigpic code { background: #3a3e4d !important; color: #fff; }
+.bigpic .eyebrow { color: var(--slate-muted); }
+
+.step-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 18px; }
+.check { display: flex; gap: 10px; align-items: center; font-weight: 600; }
+.check input { width: 20px; height: 20px; accent-color: var(--d4); }
+
+.shapes { display: flex; gap: 10px; flex-wrap: wrap; }
+.shape { display: grid; justify-items: center; gap: 2px; font-size: 0.75rem; color: var(--muted); text-align: center; min-width: 64px; }
+.shape b { color: var(--ink); font-family: var(--font-mono); font-size: 0.78rem; }
+
+table.fill { width: 100%; border-collapse: collapse; font-size: 0.9rem; min-width: 560px; }
+table.fill th, table.fill td { border-bottom: 1px solid var(--line); padding: 8px 6px; text-align: left; vertical-align: middle; }
+table.fill th { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+table.fill input { width: 100%; min-width: 70px; border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font-family: var(--font-mono); font-size: 0.82rem; background: var(--bg); color: var(--ink); }
+table.fill input.ok { border-color: var(--ok); background: var(--ok-bg); }
+table.fill input.no { border-color: var(--bad); background: var(--bad-bg); }
+.tablewrap { overflow-x: auto; }
+.tutor { display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; background: var(--note-bg); border-radius: 10px; padding: 12px 14px; }
+.tutor p { font-size: 0.92rem; }
+.tutor a.btn { text-decoration: none; display: inline-block; }
+.log { display: grid; gap: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+.toast { font-size: 0.85rem; color: var(--ok); font-weight: 600; }
+
+/* Side navigation (desktop) */
+.tray .wrap { max-width: 1200px; }
+.map-box { max-width: 900px; }
+.layout { max-width: 1200px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 40px; }
+.content { min-width: 0; max-width: 880px; }
+.sidenav { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); align-self: start; max-height: calc(100vh - 24px); overflow-y: auto; padding-block: 36px 24px; display: grid; gap: 2px; align-content: start; }
+.sn-group { margin-top: 16px; margin-bottom: 2px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.sn-link { color: var(--ink); text-decoration: none; padding: 4px 8px; border-radius: 6px; font-size: 0.9rem; }
+.sn-link:hover { background: var(--surface-2); }
+.sn-prog { font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.sn-prog .progress-bar { width: 100%; }
+.sn-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.sn-step { width: 100%; display: flex; align-items: center; gap: 8px; background: none; border: 0; border-radius: 8px; padding: 5px 8px; color: var(--ink); text-align: left; font-family: var(--font-mono); font-size: 0.8rem; }
+.sn-step:hover { background: var(--surface-2); }
+.sn-step.todo { color: var(--muted); }
+.sn-step.todo .die, .stepbtn.todo .die { filter: grayscale(1); opacity: 0.45; }
+.stepbtn.todo .lbl { color: var(--muted); }
+.sn-step[aria-current="step"] { background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--ink); color: var(--ink); font-weight: 600; }
+.sn-step .tick { margin-left: auto; color: var(--ok); font-weight: 700; }
+@media (max-width: 1000px) { .layout { grid-template-columns: minmax(0, 1fr); } .sidenav { display: none; } .content { margin: 0 auto; width: 100%; } }
+@media (min-width: 1001px) { .stepper { display: none; } }
+
+/* Code check from PDF */
+.cc-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.cc-row { display: flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-size: 0.85rem; }
+.pill { margin-left: auto; font-family: var(--font-body); font-size: 0.75rem; font-weight: 700; padding: 2px 10px; border-radius: 999px; white-space: nowrap; }
+.pill.full { background: var(--ok-bg); color: var(--ok); }
+.pill.partial { background: var(--note-bg); color: var(--accent); }
+.pill.none { background: var(--surface-2); color: var(--muted); }
+input[type="file"] { font: inherit; font-size: 0.9rem; max-width: 100%; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
+</style>
+
+<header class="tray">
+  <div class="wrap">
+    <a class="home-link" href="../">← AP CSP class home</a>
+    <p class="eyebrow">AP CSP · CMU CS Academy · Functions project</p>
+    <h1>Dice Roller, one function at a time</h1>
+    <p class="lede">You've already built the buttons and the canvas. Now you'll make it work by writing eight small functions. Each one does a single job, and together they make a simplified Google Dice Roller with up to 3 dice: 4, 6, 8, 10, 12 and 20-sided.</p>
+    <div class="tray-links">
+      <a href="https://academy.cs.cmu.edu/sharing/turquoiseCrocodile402747" target="_blank" rel="noopener">Try the finished version ↗</a>
+      <a href="https://share.google/PCoOcoj6POBgq6gYb" target="_blank" rel="noopener">Google's Dice Roller ↗</a>
+      <a href="https://app.flintk12.com/activities/dice-roller-pro-5e9344" target="_blank" rel="noopener">Flint AI tutor ↗</a>
+    </div>
+
+    <div class="map-box">
+      <div class="map-head">
+        <p class="eyebrow" style="margin:0">Function map: who calls whom</p>
+        <p>Hover or tap a function to light up the functions it calls. Click to jump to its step.</p>
+      </div>
+      <div class="map-scroll">
+        <svg id="map" viewBox="0 0 720 350" role="img" aria-label="Call diagram. onMousePress calls rollAllDice, addDice, removeDice and totalDice. rollAllDice calls rollDice and totalDice. addDice and removeDice call updateDice. updateDice calls getDiceColor, rollDice and totalDice.">
+          <defs>
+            <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8a90a6"/></marker>
+          </defs>
+          <g id="edges"></g>
+          <g id="nodes"></g>
+        </svg>
+      </div>
+      <div class="legend"><span>Top row: CMU calls it when you click</span><span>Middle: does one task for a button</span><span>Bottom: small helpers that others call</span></div>
+    </div>
+  </div>
+</header>
+
+<div class="layout">
+<aside class="sidenav" id="sidenav" aria-label="Guide outline and progress"></aside>
+<main class="content">
+
+  <section class="block" aria-labelledby="h-how">
+    <h2 id="h-how">How this guide works</h2>
+    <ol class="howto">
+      <li><p>Open your <strong>starter code</strong> in CMU CS Academy. Each function already has its header, comments, and the word <code>pass</code> as a placeholder.</p></li>
+      <li><p>Pick a step below. Read what the function does and why it exists, then reveal the code <strong>one chunk at a time</strong>. Type each chunk into your function in place of <code>pass</code>, then delete <code>pass</code>. CMU doesn't let you paste into your program, so you'll type every line, which also helps you notice what each one does.</p></li>
+      <li><p><strong>Test before moving on.</strong> Type the test code at the very bottom of your program, exactly as shown. Write your prediction, run the program, then paste what the console actually printed into this page. Compare the two. Everything you type is saved in your <a href="#h-log">Testing Log</a> at the bottom of this page. At the end of each class, copy the log and submit it to Canvas to show your progress.</p></li>
+      <li><p>Put a <code>#</code> in front of each test line so it stops running (that's called "commenting it out"), check the step off, and go to the next function.</p></li>
+    </ol>
+    <p class="intro-text">Where does test code go? Python reads your program from top to bottom. A function has to be defined <em>before</em> a line that calls it runs, so tests always go after all the <code>def</code> blocks:</p>
+<pre class="filemap">import random
+<span class="dim"># Variable Declarations     colors, dice shapes, buttons, app.diceCount</span>
+<span class="dim"># FUNCTION DEFINITIONS      def rollDice ... def onMousePress</span>
+<span class="hot"># TESTS (temporary)         type test code down here, at the very bottom</span></pre>
+    <p class="intro-text muted">You'll jump around your file a bit: the steps go in a different order than the functions appear in the starter code. Use Ctrl+F (Cmd+F on a Mac) to find each <code>def</code>.</p>
+  </section>
+
+  <section class="block" aria-labelledby="h-why">
+    <h2 id="h-why">Why break a project into functions?</h2>
+    <p class="intro-text">You could write this whole app as one giant block of code inside <code>onMousePress</code>. It would work, but it would be about four times longer and much harder to fix. Here's what small functions buy you, with real examples from this project:</p>
+    <div class="why-list">
+      <div class="why"><h4>Easier to read</h4><div><code>onMousePress</code> reads like a to-do list: "if Roll was clicked, <code>rollAllDice()</code>." You can tell what happens without reading the details.</div></div>
+      <div class="why"><h4>Easier to debug</h4><div>You can test <code>rollDice(6)</code> by itself before a single button works. If the total is wrong, there's exactly one place to look: <code>totalDice()</code>.</div></div>
+      <div class="why"><h4>Easier to reuse</h4><div><code>rollDice()</code> is written once and called from 4 places: three times in <code>rollAllDice()</code> and once in <code>updateDice()</code>.</div></div>
+      <div class="why"><h4>Easier to maintain</h4><div>If Google changes its purple, you change one line in <code>getDiceColor()</code>, and every purple die updates.</div></div>
+      <div class="why"><h4>More collaborative</h4><div>One partner can write <code>getDiceColor()</code> while the other writes <code>addDice()</code>. They only need to agree on the function's name, its parameters, and what it returns.</div></div>
+    </div>
+  </section>
+
+  <section class="block" aria-labelledby="h-ideas">
+    <h2 id="h-ideas">Four ideas you'll use in every step</h2>
+    <div class="concepts">
+      <div class="concept">
+        <h4>Parameters and return values</h4>
+        <p>Parameters are a function's <strong>inputs</strong>. The return value is its <strong>output</strong>.</p>
+        <div class="flow"><span class="chip">6</span>→<span class="chip fn">rollDice(numSides)</span>→<span class="chip">4</span></div>
+        <p class="muted">In <code>rollDice(6)</code>, <code>6</code> is the <em>argument</em> and <code>numSides</code> is the <em>parameter</em> that receives it. Some functions don't return anything. Instead they change the canvas, like <code>totalDice()</code>.</p>
+      </div>
+      <div class="concept">
+        <h4>Helper functions</h4>
+        <p>Small functions that do one job for bigger functions.</p>
+        <div class="flow"><span class="chip fn">updateDice</span>uses<span class="chip">getDiceColor</span><span class="chip">rollDice</span><span class="chip">totalDice</span></div>
+        <p class="muted">Build the helpers first, test them, then trust them when you build the big functions.</p>
+      </div>
+      <div class="concept">
+        <h4>Global variables with <code>app.</code></h4>
+        <p>Values that every function needs to share, like <code>app.diceCount</code>, are stored on the <code>app</code> object.</p>
+        <p class="muted">If you wrote <code>diceCount += 1</code> inside a function, Python would treat <code>diceCount</code> as a brand-new local variable and crash. <code>app.diceCount</code> belongs to the app, so any function can read it and change it. Shapes like <code>leftDice</code> are global too, so functions can change their properties.</p>
+      </div>
+      <div class="concept">
+        <h4>DRY: Don't Repeat Yourself</h4>
+        <p>If you're copying and pasting code, you probably need a function, or a parameter.</p>
+        <p class="muted"><code>updateDice()</code> works on the left, middle <em>and</em> right die because the die is a parameter. Without that, you'd paste the same 20 lines three times, and fixing a bug would mean fixing it three times.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" aria-labelledby="h-name">
+    <div class="log">
+      <label for="studentName" id="h-name"><h4>Your name</h4></label>
+      <p class="muted">This goes at the top of every Testing Log you submit to Canvas.</p>
+      <input id="studentName" class="namefield" type="text" autocomplete="name" placeholder="First and last name">
+    </div>
+  </section>
+
+  <section class="block" id="build" aria-labelledby="h-build">
+    <div class="build-head">
+      <h2 id="h-build">Build it</h2>
+      <div class="progress"><span id="progText">0 of 8 functions tested</span><div class="progress-bar"><span id="progBar"></span></div></div>
+    </div>
+    <nav class="stepper" id="stepper" aria-label="Steps"></nav>
+    <article class="panel" id="panel" aria-live="polite"></article>
+  </section>
+
+  <section class="block" aria-labelledby="h-upload">
+    <h2 id="h-upload">Worked on another computer?</h2>
+    <p class="intro-text">Your Testing Log only remembers what you typed in <em>this</em> browser. If you worked at home or on a different computer, bring that work here in two parts: the Testing Log from that computer, and a PDF of your code. Then copy your Testing Log at the bottom of the page as usual.</p>
+    <div class="log">
+      <h4>1. Bring in your Testing Log</h4>
+      <p>On the other computer, click <strong>Copy my testing log</strong> and save the text somewhere you can open here, like a Google Doc or an email to yourself. Logs you already submitted are also in your Canvas submissions. Paste the whole log below, or choose it as a .txt file.</p>
+      <label for="logIn" class="eyebrow">Paste your Testing Log</label>
+      <textarea id="logIn" class="namefield" style="min-height:140px;font-family:var(--font-mono);font-size:0.78rem" placeholder="Dice Roller testing log&#10;Name: …&#10;Log copied: …"></textarea>
+      <div class="btn-row"><button type="button" class="btn" id="logRestore">Add this log to my work</button><label for="logFile" class="muted">or choose a .txt file:</label><input type="file" id="logFile" accept=".txt,text/plain"></div>
+      <div id="logResult" aria-live="polite"></div>
+      <p class="muted">Your answers from both computers are combined. If the same test was done on both, the newer answer is kept.</p>
+    </div>
+    <div class="log">
+      <h4>2. Add a PDF of your code</h4>
+      <p>Save your Dice Roller program from CMU CS Academy as a PDF and choose it below. The page checks which functions you've written and adds a <strong>Code check</strong> section to your Testing Log.</p>
+      <label for="pdfIn" class="eyebrow">PDF of your code</label>
+      <input type="file" id="pdfIn" accept="application/pdf,.pdf">
+      <div id="pdfResult" aria-live="polite"></div>
+      <p class="muted">Your PDF stays on your computer. Nothing is uploaded or sent anywhere.</p>
+    </div>
+  </section>
+
+  <section class="block" aria-labelledby="h-log">
+    <h2 id="h-log">Your testing log</h2>
+    <div class="log">
+      <p><strong>Submit a new log at the end of every class.</strong> Copy it here and paste it into that day's Canvas assignment. Each log is stamped with the date and time you copied it, every test shows when you last worked on it, and anything you worked on today is marked <code>NEW TODAY</code>, so your progress from day to day is easy to see.</p>
+      <p class="muted">Your work is saved in this browser only. Use the same computer and browser each day, or your earlier answers won't be here.</p>
+      <div class="btn-row"><button class="btn" id="copyLog" type="button">Copy my testing log</button><span class="toast" id="logToast" aria-live="polite"></span></div>
+      <textarea id="logFallback" class="namefield" style="min-height:160px;font-family:var(--font-mono);font-size:0.78rem" hidden readonly aria-label="Testing log text"></textarea>
+    </div>
+  </section>
+  <p class="muted"><a href="../">Back to AP CSP class home</a></p>
+</main>
+</div>
+
+<script>
+(function () {
+const py = String.raw;
+const C = { d4: '#4f9f51', d6: '#5bbdd0', d8: '#883bde', d10: '#cf4391', d12: '#c84031', d20: '#e3752d', grey: '#545454', blue: '#2854c5' };
+
+/* ---------- storage (per-browser convenience only) ---------- */
+const KEY = 'dice-roller-guide-v1';
+let store = { tests: {}, done: {}, doneAt: {}, reveal: {}, mcq: {}, fill: {}, name: '' };
+try { const raw = localStorage.getItem(KEY); if (raw) store = Object.assign(store, JSON.parse(raw)); } catch (e) {}
+store.doneAt = store.doneAt || {};
+const stamp = ts => new Date(ts).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+const sameDay = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
+function save() { try { localStorage.setItem(KEY, JSON.stringify(store)); } catch (e) {} }
+
+/* ---------- helpers ---------- */
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+function hl(code) {
+  const re = /(#.*$)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|\b(def|if|elif|else|return|import|for|in|while|and|or|not|pass|True|False|None)\b|\b(\d+)\b|\b([A-Za-z_]\w*)(?=\s*\()/gm;
+  let out = '', last = 0, m;
+  while ((m = re.exec(code))) {
+    out += esc(code.slice(last, m.index));
+    const cls = m[1] ? 'c' : m[2] ? 's' : m[3] ? 'k' : m[4] ? 'n' : 'f';
+    out += '<span class="t-' + cls + '">' + esc(m[0]) + '</span>';
+    last = re.lastIndex;
+  }
+  return out + esc(code.slice(last));
+}
+const clean = s => s.replace(/^\n/, '').replace(/\s+$/, '');
+const pre = code => '<pre class="code"><code>' + hl(clean(code)) + '</code></pre>';
+const ic = s => '<code>' + hl(s) + '</code>';
+
+function dieSVG(shape, color, label, size) {
+  size = size || 36;
+  const c = size / 2, r = size / 2 - 2;
+  let body = '';
+  if (shape.type === 'circle') body = '<circle cx="' + c + '" cy="' + c + '" r="' + r + '" fill="' + color + '"/>';
+  else if (shape.type === 'rect') body = '<rect x="2" y="' + (size * 0.2) + '" width="' + (size - 4) + '" height="' + (size * 0.6) + '" rx="' + (size * 0.12) + '" fill="' + color + '"/>';
+  else {
+    const n = shape.points, rot = shape.rot || 0, pts = [];
+    for (let i = 0; i < n; i++) { const a = (-90 + rot + i * 360 / n) * Math.PI / 180; pts.push((c + r * Math.cos(a)).toFixed(1) + ',' + (c + r * Math.sin(a)).toFixed(1)); }
+    const dashed = shape.dashed ? ' fill="none" stroke="' + color + '" stroke-width="2" stroke-dasharray="4 3"' : ' fill="' + color + '"';
+    body = '<polygon points="' + pts.join(' ') + '"' + dashed + '/>';
+  }
+  const txtColor = shape.dark ? '#10303a' : (shape.dashed ? 'currentColor' : '#ffffff');
+  const ty = shape.points === 3 ? c + size * 0.14 : c + size * 0.05;
+  return '<svg class="die" width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '" aria-hidden="true">' + body +
+    (label !== '' ? '<text x="' + c + '" y="' + ty + '" text-anchor="middle" dominant-baseline="middle" font-family="Bricolage Grotesque, system-ui, sans-serif" font-weight="800" font-size="' + (size * 0.36) + '" fill="' + txtColor + '">' + label + '</text>' : '') + '</svg>';
+}
+
+/* ---------- step content ---------- */
+const STEPS = [
+{
+  id: 'step-1', fn: 'rollDice', sig: 'rollDice(numSides)', color: C.d4, shape: { points: 3 },
+  job: 'Given a number of sides, give back one random roll.',
+  params: ic('numSides') + ' (integer)', returns: 'the roll (integer)', calls: [], calledBy: ['rollAllDice', 'updateDice'],
+  why: '<p>Every die in the app needs rolling: once when it is added, and again every time Roll is clicked. If the random-number code lived in each of those places, you would have four copies of it. As a function it is written once and used everywhere. It is also the easiest function to test, because it needs nothing else to work.</p>',
+  starter: py`
+def rollDice( numSides ):
+    #Description: Simulates a single dice roll
+    #Parameters (datatype): numSides (integer) - represents the number of sides for the dice being rolled
+    #Return: Random value selected from 1 to number of dice sides
+    pass`,
+  chunks: [
+    { title: 'Announce the call (debug prints)', code: py`
+    print("Function Called: rollDice( ) ")
+    print("parameters: ", "numSides: ", numSides, '\n')`,
+      lines: [
+        ['print("Function Called: rollDice( ) ")', 'Prints a message every time the function runs, so the console shows you <em>when</em> it gets called.'],
+        ['print("parameters: ", "numSides: ", numSides, \'\\n\')', 'Shows the value the parameter received. Call ' + ic('rollDice(6)') + ' and this prints 6. The ' + ic("'\\n'") + ' adds a blank line so the console is easier to read.']
+      ] },
+    { title: 'Roll, but only if there is a real die', code: py`
+    if (numSides > 0):
+        diceRoll = random.randint(1, numSides)
+    else:
+        diceRoll = 0`,
+      lines: [
+        ['if (numSides > 0):', 'A real die has at least 1 side.'],
+        ['diceRoll = random.randint(1, numSides)', 'Picks a random whole number from 1 up to and <strong>including</strong> ' + ic('numSides') + '. Both ends are included. This is why the file starts with ' + ic('import random') + '.'],
+        ['diceRoll = 0', 'An empty dice slot has ' + ic('.sides') + ' set to 0. Rolling it gives 0, which adds nothing to the total. Without this check, ' + ic('random.randint(1, 0)') + ' would crash with an error.']
+      ] },
+    { title: 'Show the result and send it back', code: py`
+    #Output to console is ALWAYS helpful, but is just for you, the programmer
+    print("diceRoll: ", diceRoll, '\n')
+
+    return diceRoll`,
+      lines: [
+        ['print("diceRoll: ", diceRoll, \'\\n\')', 'Shows <em>you</em> the roll. The person using the app never sees the console.'],
+        ['return diceRoll', 'Sends the value back to whichever line called the function, so that code can use it. ' + ic('print') + ' only displays a value. ' + ic('return') + ' hands it back.']
+      ] }
+  ],
+  callout: '<strong>print vs. return</strong><p>' + ic('print(diceRoll)') + ' is for the programmer: it puts text in the console and the program can\'t use it. ' + ic('return diceRoll') + ' is for the program: it hands the value back so a line like ' + ic('leftDiceLabel.value = rollDice(6)') + ' can store it.</p>',
+  tests: [
+    { id: 't1a', title: 'Roll a 6-sided die', code: py`
+print(rollDice(6))`,
+      ask: 'What lines will the console show? What numbers are possible?',
+      expected: '<p>Something like this (your number will be anywhere from 1 to 6):</p><pre>Function Called: rollDice( ) \nparameters:  numSides:  6 \n\ndiceRoll:  4 \n\n4</pre><p>The last two numbers always match. The function printed ' + ic('diceRoll') + ', then your ' + ic('print()') + ' showed the value it returned.</p>' },
+    { id: 't1b', title: 'Roll an empty slot', code: py`
+print(rollDice(0))`,
+      ask: 'What will it print, and why does this case matter?',
+      expected: '<p>' + ic('diceRoll:  0') + ' and then ' + ic('0') + '. Empty dice slots have ' + ic('.sides = 0') + ', and later ' + ic('rollAllDice()') + ' rolls all three slots, even the empty ones. Returning 0 keeps the total correct.</p>' },
+    { id: 't1c', title: 'Roll a 20-sided die five times', code: py`
+for i in range(5):
+    print(rollDice(20))`,
+      note: '<strong>New syntax:</strong> this test uses a <code>for</code> loop, which runs the indented line 5 times. You\'ll learn how loops work soon. For now, just type the code exactly as shown, including the 4-space indent on the second line.',
+      ask: 'Will all five numbers be the same? Could you ever see 0 or 21?',
+      expected: '<p>Five rolls between 1 and 20, usually different. You will never see 0 or 21, because ' + ic('randint(1, 20)') + ' only picks from 1 to 20. Notice that "Function Called: rollDice" printed 5 times: one function, called 5 times.</p>' }
+  ],
+  mcq: { q: 'Later, rollAllDice() will roll all 3 dice, and updateDice() will roll each new die. How many times does the line random.randint(1, numSides) need to appear in the whole program?',
+    opts: ['Once, inside rollDice()', '3 times, once per die', '4 times, once per place a die gets rolled'], a: 0,
+    fb: 'Once. Every place that needs a roll calls rollDice() instead of copying the randint line. That is the DRY principle in action.' },
+  big: 'rollDice() is a <strong>helper</strong>: it calls no other functions of yours. rollAllDice() will call it 3 times, and updateDice() will call it whenever a new die is added.'
+},
+{
+  id: 'step-2', fn: 'getDiceColor', sig: 'getDiceColor(numSides)', color: C.d6, shape: { points: 4, rot: 45, dark: true },
+  job: 'Turn a number of sides into the matching Google Dice Roller color.',
+  params: ic('numSides') + ' (integer)', returns: 'a color', calls: [], calledBy: ['updateDice'],
+  why: '<p>Each die type has its own color. Instead of making every part of the program remember "8 means purple," one function answers that question. If a color ever changes, you change one line here. Because it <em>returns</em> a color, you can use it anywhere a color fits, like ' + ic('fill=getDiceColor(4)') + '.</p>',
+  starter: py`
+def getDiceColor(numSides):
+    #Description: Returns the correct Google Dice Roller Color based on the number of sides (0, 4, 6, 8, 10, 12, or 20)
+    #              Can be used anywhere a single color value is needed: fill=getDiceColor(4)
+    #Parameters (datatype): numSides (integer): Represents the number of sides of the dice. 0 is no dice present
+    #Return: color value for dice by on the number of sides
+    pass`,
+  chunks: [
+    { title: 'Start with a default', code: py`
+    #default color is Google Grey Top
+    color = app.gGreyTop`,
+      lines: [
+        ['color = app.gGreyTop', 'If ' + ic('numSides') + ' doesn\'t match any die (like 0), the color matches the top background, so an empty die blends in. ' + ic('app.gGreyTop') + ' is one of the global colors at the top of your file.']
+      ] },
+    { title: 'The first two dice', code: py`
+    if (numSides == 4):
+        color = app.gGreen
+    elif(numSides == 6):
+        color = app.gLightBlue`,
+      lines: [
+        ['if (numSides == 4):', ic('==') + ' <em>compares</em> two values. A single ' + ic('=') + ' <em>assigns</em> a value. Mixing them up is one of the most common bugs.'],
+        ['elif(numSides == 6):', 'Python only checks an ' + ic('elif') + ' if every condition above it was False, so at most one branch runs.']
+      ] },
+    { title: 'Your turn: 8, 10, 12 and 20', tryFirst: 'Before you reveal this chunk, write the next four <code>elif</code> branches yourself. Use the color variables from the top of your file: 8 is purple, 10 is pink, 12 is red, 20 is orange.', code: py`
+    elif(numSides == 8):
+        color = app.gPurple
+    elif(numSides == 10):
+        color = app.gPink
+    elif(numSides == 12):
+        color = app.gRed
+    elif(numSides == 20):
+        color = app.gOrange`,
+      lines: [
+        ['elif(numSides == 8):', 'Same pattern, four more times. Check your version: did you use ' + ic('==') + ', a colon, and an indent on each line?']
+      ] },
+    { title: 'Send the color back', code: py`
+    return color`,
+      lines: [
+        ['return color', 'This line is indented to the function level, <strong>not</strong> inside the last ' + ic('elif') + ', so it runs no matter which branch ran. If you indent it one level too far, ' + ic('getDiceColor(4)') + ' returns ' + ic('None') + '.']
+      ] }
+  ],
+  tests: [
+    { id: 't2a', title: 'Is a 4-sided die green?', code: py`
+print(getDiceColor(4) == app.gGreen)`,
+      ask: 'Predict: True or False?', expected: '<p>' + ic('True') + '. The function returned the exact color stored in ' + ic('app.gGreen') + '.</p>' },
+    { id: 't2b', title: 'Is an 8-sided die green?', code: py`
+print(getDiceColor(8) == app.gGreen)`,
+      ask: 'Predict: True or False?', expected: '<p>' + ic('False') + '. An 8-sided die is purple. Testing for the <em>wrong</em> answer matters too.</p>' },
+    { id: 't2c', title: 'See the color on the canvas', code: py`
+Circle(200, 100, 40, fill=getDiceColor(20))`,
+      ask: 'What will appear on the canvas? Then change 20 to 4, 6, 8, 10, 12 and 0. What happens with 0?',
+      expected: '<p>An orange circle at the top middle. Each number gives its own color. With 0 the circle seems to disappear: it is ' + ic('app.gGreyTop') + ', the same color as the background behind it. Delete this test circle when you are done.</p>' }
+  ],
+  mcq: { q: 'What does getDiceColor(7) return?', opts: ['app.gGreyTop', 'None', 'An error message', 'app.gGreen'], a: 0,
+    fb: 'app.gGreyTop. No branch matches 7, so color keeps its default value, and return color still runs.' },
+  big: 'Another <strong>helper</strong> with no calls of its own. updateDice() will use it to paint each new die.'
+},
+{
+  id: 'step-3', fn: 'totalDice', sig: 'totalDice()', color: C.d8, shape: { points: 6 },
+  job: 'Add up the three dice and the +/- offset, then show the total on the canvas.',
+  params: 'none', returns: 'nothing (it updates the canvas)', calls: [], calledBy: ['rollAllDice', 'updateDice', 'onMousePress'],
+  why: '<p>The total has to be recalculated whenever something changes: after a roll, after a die is added or removed, and after the offset changes. That is three different places in the program. One function means one correct way to add things up.</p>',
+  callout: '<strong>No parameters, no return</strong><p>Some functions answer a question and <em>return</em> the answer, like ' + ic('rollDice') + '. Others do a job, like ' + ic('totalDice') + ', which reads the global labels and changes ' + ic('totalNumber') + ' on the canvas.</p>',
+  starter: py`
+def totalDice( ):
+    #Function: Adds dice values together and displays on the canvas
+    #Parameters (datatype): none
+    #Return: none
+    pass`,
+  chunks: [
+    { title: 'Add the three dice', code: py`
+    total = 0
+
+    total += leftDiceLabel.value
+    total += middleDiceLabel.value
+    total += rightDiceLabel.value`,
+      lines: [
+        ['total = 0', 'A local variable that starts at 0 and collects the sum. Programmers call this an <em>accumulator</em>.'],
+        ['total += leftDiceLabel.value', ic('+=') + ' adds to what is already there. Each die label\'s ' + ic('.value') + ' holds its current roll.'],
+        ['total += rightDiceLabel.value', 'Empty dice slots hold 0, so it is safe to add all three without checking which dice exist.']
+      ] },
+    { title: 'Add the offset, if there is one', code: py`
+    if ( plusMinusLabel.value != "+/-"):
+        total += int(plusMinusLabel.value)`,
+      lines: [
+        ['if ( plusMinusLabel.value != "+/-"):', 'The +/- button shows "+/-" until the user types an offset. Then it shows something like "+3" or -2. ' + ic('!=') + ' means "not equal."'],
+        ['total += int(plusMinusLabel.value)', ic('int()') + ' turns text like "+3" into the number 3. That\'s why we check first: ' + ic('int("+/-")') + ' would crash, because "+/-" isn\'t a number.']
+      ] },
+    { title: 'Show it', code: py`
+    totalNumber.value = total`,
+      lines: [
+        ['totalNumber.value = total', 'Updates the Total label on the canvas. The result goes to the screen instead of being returned.']
+      ] }
+  ],
+  tests: [
+    { id: 't3a', title: 'Two dice', code: py`
+leftDiceLabel.value = 3
+middleDiceLabel.value = 5
+totalDice()
+print("Total:", totalNumber.value)`,
+      ask: 'What will the console print? What will the Total label on the canvas show?',
+      expected: '<p>' + ic('Total: 8') + ', and the canvas shows 8 next to "Total:". The dice labels are still invisible, so the total is the only thing you see change.</p>' },
+    { id: 't3b', title: 'Add a positive offset', code: py`
+leftDiceLabel.value = 3
+middleDiceLabel.value = 5
+plusMinusLabel.value = "+2"
+totalDice()
+print("Total:", totalNumber.value)`,
+      ask: 'Predict the total and what the +/- button will show.',
+      expected: '<p>' + ic('Total: 10') + '. The button now reads +2, and ' + ic('int("+2")') + ' became 2.</p>' },
+    { id: 't3c', title: 'Add a negative offset', code: py`
+leftDiceLabel.value = 3
+middleDiceLabel.value = 5
+plusMinusLabel.value = -4
+totalDice()
+print("Total:", totalNumber.value)`,
+      ask: 'Predict the total. Why does int() work on both "+2" and -4?',
+      expected: '<p>' + ic('Total: 4') + ' (3 + 5 − 4). ' + ic('int()') + ' accepts text that looks like a number, like "+2", and it also accepts a number that is already an integer, like -4.</p>' }
+  ],
+  mcq: { q: 'Why can totalDice() add all three labels without first checking which dice are on the canvas?',
+    opts: ['Empty slots hold 0, and adding 0 changes nothing', 'Python skips labels that are invisible', 'totalDice() checks app.diceCount first', 'It can\'t; it crashes with fewer than 3 dice'], a: 0,
+    fb: 'Empty slots hold 0. Choosing good "empty" values (0 for the roll, 0 for sides) makes the code simpler everywhere else.' },
+  big: 'Three different functions will call totalDice(): rollAllDice(), updateDice() and onMousePress(). In your file, totalDice is written <em>below</em> rollAllDice, and that\'s fine. Python only needs a function to be defined before it actually <em>runs</em>.'
+},
+{
+  id: 'step-4', fn: 'rollAllDice', sig: 'rollAllDice()', color: C.d10, shape: { points: 8 },
+  job: 'Do the Roll button\'s job: roll every slot and update the total.',
+  params: 'none', returns: 'nothing', calls: ['rollDice', 'totalDice'], calledBy: ['onMousePress'],
+  why: '<p>Here the helpers pay off. Because ' + ic('rollDice()') + ' and ' + ic('totalDice()') + ' are already written and tested, this function is just four lines, and you can read it like a sentence.</p>',
+  starter: py`
+def rollAllDice():
+    #Function: Simulate rolling all 3 dice
+    #Parameters (datatype): none
+    #Return: none
+    pass`,
+  chunks: [
+    { title: 'Debug print', code: py`
+    print("Roll all dice", '\n')`,
+      lines: [['print("Roll all dice", \'\\n\')', 'A sign in the console that this function started.']] },
+    { title: 'Roll each slot', code: py`
+    leftDiceLabel.value = rollDice( leftDice.sides )
+    middleDiceLabel.value = rollDice( middleDice.sides )
+    rightDiceLabel.value = rollDice( rightDice.sides )`,
+      lines: [
+        ['leftDiceLabel.value = rollDice( leftDice.sides )', 'Read it from the inside out: get the die\'s ' + ic('.sides') + ', pass it to ' + ic('rollDice') + ', and store the returned roll in the label so it shows on the die.'],
+        ['leftDice.sides', ic('.sides') + ' is a <strong>custom property</strong>: CMU shapes don\'t come with it. Your starter code adds it with ' + ic('leftDice.sides = 0') + '. CMU lets you attach your own properties to any shape.'],
+        ['rollDice( rightDice.sides )', 'Same function, three different arguments. If a slot is empty, its sides are 0, so ' + ic('rollDice(0)') + ' returns 0.']
+      ] },
+    { title: 'Update the total', code: py`
+    totalDice()`,
+      lines: [['totalDice()', 'The dice just changed, so the total is out of date. One line calls the helper that fixes it.']] }
+  ],
+  tests: [
+    { id: 't4a', title: 'One die in the left slot', code: py`
+leftDice.sides = 6
+leftDiceLabel.visible = True
+rollAllDice()
+print("Left:", leftDiceLabel.value, "Middle:", middleDiceLabel.value, "Right:", rightDiceLabel.value, "Total:", totalNumber.value)`,
+      ask: 'Predict each value. How many times will "Function Called: rollDice" appear in the console?',
+      expected: '<p>Left is 1–6, Middle is 0, Right is 0, and Total equals Left. A number appears on the canvas where the left die will go (the die shape itself is still invisible). "Function Called: rollDice" appears <strong>3 times</strong>: once per slot, even the empty ones.</p>' },
+    { id: 't4b', title: 'Two dice', code: py`
+leftDice.sides = 6
+middleDice.sides = 20
+leftDiceLabel.visible = True
+middleDiceLabel.visible = True
+rollAllDice()
+print("Left:", leftDiceLabel.value, "Middle:", middleDiceLabel.value, "Total:", totalNumber.value)`,
+      ask: 'What ranges are possible for Left, Middle and Total?',
+      expected: '<p>Left is 1–6, Middle is 1–20, and Total is anywhere from 2 to 26. Run it a few times and check that Total always equals Left + Middle.</p>' }
+  ],
+  mcq: { q: 'rollAllDice() never uses random.randint. Where does the randomness come from?',
+    opts: ['From the rollDice() helper it calls', 'From totalDice()', 'From CMU automatically', 'From the .sides property'], a: 0,
+    fb: 'From rollDice(). rollAllDice() doesn\'t need to know how a roll works; it trusts the helper. That\'s what makes it so short.' },
+  big: 'The Roll button will run this through onMousePress(). It is your first function that <strong>calls other functions</strong>: rollDice() 3 times, then totalDice().'
+},
+{
+  id: 'step-5', fn: 'updateDice', sig: 'updateDice(dice, diceLabel, numSides, addDice)', color: C.d12, shape: { points: 10 },
+  job: 'Set up one dice slot with the right shape, color and roll, or clear it.',
+  params: '4: ' + ic('dice') + ', ' + ic('diceLabel') + ', ' + ic('numSides') + ', ' + ic('addDice'), returns: 'nothing', calls: ['getDiceColor', 'rollDice', 'totalDice'], calledBy: ['addDice', 'removeDice'],
+  why: '<p>This is the longest function, and it is the reason the project uses parameters. There are three slots (left, middle, right), and each one can be added or removed. Without parameters you would write this code six times. Because the die and its label are passed in, <strong>one</strong> function handles every slot.</p>',
+  extra: '<div class="tablewrap"><table class="fill" style="min-width:480px"><thead><tr><th>Parameter</th><th>What you pass in</th></tr></thead><tbody>' +
+    '<tr><td>' + ic('dice') + '</td><td>which die shape: ' + ic('leftDice') + ', ' + ic('middleDice') + ' or ' + ic('rightDice') + ' (each one is a RegularPolygon)</td></tr>' +
+    '<tr><td>' + ic('diceLabel') + '</td><td>that die\'s number label: ' + ic('leftDiceLabel') + ', etc.</td></tr>' +
+    '<tr><td>' + ic('numSides') + '</td><td>4, 6, 8, 10, 12 or 20 (0 when removing)</td></tr>' +
+    '<tr><td>' + ic('addDice') + '</td><td>' + ic('True') + ' to add a die, ' + ic('False') + ' to remove it. A True/False value used this way is called a <em>flag</em>.</td></tr></tbody></table></div>' +
+    '<p class="muted">Heads up: the parameter ' + ic('addDice') + ' has the same name as the function ' + ic('addDice()') + ' you\'ll write next. Inside updateDice, ' + ic('addDice') + ' means the True/False value. It works, but a name like ' + ic('isAdding') + ' would be clearer, which is a good reminder that descriptive names matter.</p>',
+  starter: py`
+def updateDice( dice, diceLabel, numSides , addDice):
+    #Function: Updates the dice based on the number of sides
+    #Parameters (datatype): dice (Rect) - the dice being updated
+    #                       diceLabel (Label) - the lable of the dice being updated
+    #                       numSides (Integer) - represents the number of sides of the dice button clicked
+    #                       addDice (Boolean) - Flag variable to indicte if adding or removing a dice
+    #Return: none
+    pass`,
+  chunks: [
+    { title: 'Adding? Set the defaults', code: py`
+    if (addDice):
+        #Rollable Dice are all RegularPolygons and thus are differentiated by their points
+        #All rollable dice will have the same radius, 65, except 6 sides dice which, have a radius of 75.
+        #6 sided dice also needs to be roated by 45 degress, since a 4 sided RegularPolygon defaults to a diamond.
+        color = getDiceColor(numSides)
+        radius = 65
+        rotateAngle = 0`,
+      lines: [
+        ['if (addDice):', 'A Boolean can be the whole condition. You don\'t need ' + ic('== True') + '.'],
+        ['color = getDiceColor(numSides)', 'Your step 2 helper picks the color.'],
+        ['radius = 65', 'Most dice use radius 65 with no rotation. Set the common case first, then change it only for the dice that are different.']
+      ] },
+    { title: 'Pick the shape', shapes: true, code: py`
+        if (numSides == 4):
+            points = 3
+        elif (numSides == 6):
+            points = 4
+            radius = 75
+            rotateAngle = 45
+        elif (numSides == 8):
+            points = 6
+        elif (numSides == 10):
+            points = 8
+        elif (numSides == 12):
+            points = 10
+        elif (numSides == 20):
+            points = 5`,
+      lines: [
+        ['points = 3', ic('points') + ' is how many corners the RegularPolygon has. It is <em>not</em> the number of sides on the real die. A 4-sided die is drawn as a triangle, just like Google\'s icon.'],
+        ['elif (numSides == 6):', 'The 6-sided die is the special case: bigger, and rotated 45° so the diamond becomes a square.'],
+        ['if (numSides == 4):', 'This if/elif sits <em>inside</em> the ' + ic('if (addDice):') + ' block, so it\'s indented 8 spaces. An if inside an if is called a <em>nested</em> if.']
+      ] },
+    { title: 'Apply it to the die', code: py`
+        dice.sides = numSides
+        dice.visible = True
+        dice.fill = getDiceColor(numSides)
+        dice.points = points
+        dice.radius = radius
+        dice.rotateAngle = rotateAngle
+        diceLabel.value = rollDice(dice.sides)
+        diceLabel.visible = True
+        app.diceCount += 1
+        print("Dice added", '\n')`,
+      lines: [
+        ['dice.sides = numSides', 'Saves the die type on the shape, so rollAllDice() knows how to roll it later.'],
+        ['dice.points = points', 'Changing a property changes the shape on screen right away. The same die can be a triangle now and a pentagon later.'],
+        ['diceLabel.value = rollDice(dice.sides)', 'A new die shows a roll right away, the way Google\'s does. That\'s your step 1 helper again.'],
+        ['app.diceCount += 1', 'The global counter goes up. addDice() will use it to decide which slot is next.']
+      ],
+      spot: 'Look at line 3: <code>dice.fill = getDiceColor(numSides)</code>. The first chunk already saved that answer in <code>color</code>. Could you write <code>dice.fill = color</code> instead? (Yes. Both work, and using the variable avoids calling the function twice.)' },
+    { title: 'Removing? Reset to empty', code: py`
+    else:
+        dice.sides = 0
+        dice.visible = False
+        diceLabel.value = 0
+        diceLabel.visible = False
+        app.diceCount -= 1
+
+        maxDiceLabel1.visible = False
+        maxDiceLabel2.visible = False
+        print("Dice removed", '\n')`,
+      lines: [
+        ['else:', 'Lines up with ' + ic('if (addDice):') + ' (4 spaces), so it runs when the flag is False.'],
+        ['dice.sides = 0', 'Back to the "empty" values: sides 0 means rollDice() returns 0, and value 0 means the total ignores it.'],
+        ['maxDiceLabel1.visible = False', 'If the "3 Dice Max" warning was showing, there is room again, so hide it.']
+      ] },
+    { title: 'Update the total either way', code: py`
+    #Update the Dice Total
+    totalDice()`,
+      lines: [['totalDice()', 'Indented 4 spaces: inside the function but <strong>outside</strong> the if/else, so it runs whether a die was added or removed.']] }
+  ],
+  tests: [
+    { id: 't5a', title: 'Add a 20-sided die on the left', code: py`
+updateDice(leftDice, leftDiceLabel, 20, True)
+print("sides:", leftDice.sides, "points:", leftDice.points, "count:", app.diceCount)`,
+      ask: 'What appears on the canvas? What will the print line show?',
+      expected: '<p>An orange pentagon on the left with a number from 1–20, and the total matches it. The console shows ' + ic('sides: 20 points: 5 count: 1') + '.</p>' },
+    { id: 't5b', title: 'Fill two slots', code: py`
+updateDice(leftDice, leftDiceLabel, 6, True)
+updateDice(middleDice, middleDiceLabel, 8, True)
+print("count:", app.diceCount, "total:", totalNumber.value)`,
+      ask: 'Describe both dice (shape, color, position). What is the count?',
+      expected: '<p>A light-blue square on the left and a purple hexagon in the middle, sitting a little higher. The count is 2, and the total is the sum of both numbers. Same function, two different slots: that\'s what parameters are for.</p>' },
+    { id: 't5c', title: 'Add, then remove', code: py`
+updateDice(leftDice, leftDiceLabel, 12, True)
+updateDice(leftDice, leftDiceLabel, 0, False)
+print("visible:", leftDice.visible, "count:", app.diceCount, "total:", totalNumber.value)`,
+      ask: 'What will you see on the canvas? What will print?',
+      expected: '<p>Nothing on the canvas: the red decagon is added and removed before the screen even draws. The console shows ' + ic('visible: False count: 0 total: 0') + ', plus "Dice added" and then "Dice removed".</p>' }
+  ],
+  mcq: { q: 'Why does updateDice() take dice and diceLabel as parameters instead of always using leftDice and leftDiceLabel?',
+    opts: ['So one function works for any of the three slots', 'Because CMU requires every function to have parameters', 'To make the function run faster', 'So the function can return the die'], a: 0,
+    fb: 'So one function works for any slot. The caller decides which die; updateDice decides how to set it up.' },
+  big: 'updateDice() is the <strong>hub</strong> of the project. It calls three helpers (getDiceColor, rollDice, totalDice), and the next two functions, addDice() and removeDice(), both call it.'
+},
+{
+  id: 'step-6', fn: 'addDice', sig: 'addDice(numSides)', color: C.d20, shape: { points: 5 },
+  job: 'Decide which slot gets the new die, then let updateDice() set it up.',
+  params: ic('numSides') + ' (integer)', returns: 'nothing', calls: ['updateDice'], calledBy: ['onMousePress'],
+  why: '<p>Splitting the work keeps both functions simple: addDice() decides <strong>where</strong> the die goes, and updateDice() decides <strong>how</strong> to set it up. Each one can be tested and fixed on its own.</p>',
+  starter: py`
+def addDice( numSides ):
+    #Function: Adds a Rollable Dice based on the dice button clicked
+    #Parameters (datatype): numSides (Integer) - represents the number of sides of the dice button clicked
+    #Return: none
+    pass`,
+  chunks: [
+    { title: 'Pick the next open slot', code: py`
+    #Check the number of current rollable dice
+    if(app.diceCount == 0):
+        updateDice( leftDice, leftDiceLabel, numSides, True )
+    elif(app.diceCount == 1):
+        updateDice( middleDice, middleDiceLabel, numSides, True )
+    elif(app.diceCount == 2):
+        updateDice( rightDice, rightDiceLabel, numSides, True )`,
+      lines: [
+        ['if(app.diceCount == 0):', 'No dice yet, so the left slot is next. One die means the middle is next; two means the right.'],
+        ['updateDice( middleDice, middleDiceLabel, numSides, True )', ic('numSides') + ' is passed straight through to updateDice. ' + ic('True') + ' tells it we\'re adding.']
+      ] },
+    { title: 'Already 3 dice?', code: py`
+    else:
+        maxDiceLabel1.visible = True
+        maxDiceLabel2.visible = True
+        print("3 dice is Max")`,
+      lines: [
+        ['maxDiceLabel1.visible = True', 'Shows the red "3 Dice Max / Click a dice to remove" warning at the top.'],
+        ['print("3 dice is Max")', 'updateDice() is not called here, so ' + ic('app.diceCount') + ' stays at 3.']
+      ] }
+  ],
+  tests: [
+    { id: 't6a', title: 'Add two dice', code: py`
+addDice(4)
+addDice(10)
+print("count:", app.diceCount)`,
+      ask: 'Which dice appear, and where? What is the count?',
+      expected: '<p>A green triangle on the left and a pink octagon in the middle. ' + ic('count: 2') + '.</p>' },
+    { id: 't6b', title: 'Try to add four', code: py`
+addDice(4)
+addDice(10)
+addDice(12)
+addDice(20)
+print("count:", app.diceCount)`,
+      ask: 'What happens to the fourth die? What is the count?',
+      expected: '<p>Three dice appear (green, pink, red), the red "3 Dice Max" warning shows at the top, and the console prints "3 dice is Max". The 20-sided die is never created, so ' + ic('count: 3') + '.</p>' }
+  ],
+  mcq: { q: 'You call addDice(8) when app.diceCount is 1. Which line runs?',
+    opts: ['updateDice( middleDice, middleDiceLabel, 8, True )', 'updateDice( leftDice, leftDiceLabel, 8, True )', 'updateDice( rightDice, rightDiceLabel, 8, True )', 'The 3 Dice Max warning'], a: 0,
+    fb: 'The middle slot. One die already exists (on the left), so the middle slot is next.' },
+  big: 'Each dice button will call addDice() with its own number, like addDice(4) or addDice(6). addDice() is only 8 lines long because updateDice() does the heavy lifting.'
+},
+{
+  id: 'step-7', fn: 'removeDice', sig: 'removeDice()', color: C.grey, shape: { type: 'circle' },
+  job: 'Remove the rightmost die.',
+  params: 'none', returns: 'nothing', calls: ['updateDice'], calledBy: ['onMousePress'],
+  why: '<p>This is the mirror image of addDice(): it uses ' + ic('app.diceCount') + ' to find the last filled slot, then asks the same ' + ic('updateDice()') + ' to clear it. Writing the removal code once inside updateDice means removeDice() is tiny.</p>',
+  starter: py`
+def removeDice():
+    #Function: Removes a Rollable Dice from right to left
+    #Parameters (datatype): none
+    #Return: none
+    pass`,
+  chunks: [
+    { title: 'Find the last die and clear it', code: py`
+    #Check the number of current rollable dice
+    if (app.diceCount == 1):
+        updateDice( leftDice, leftDiceLabel, 0, False )
+    elif (app.diceCount == 2):
+        updateDice( middleDice, middleDiceLabel, 0, False )
+    elif (app.diceCount == 3):
+        updateDice( rightDice, rightDiceLabel, 0, False )`,
+      lines: [
+        ['if (app.diceCount == 1):', 'Compare with addDice: there, a count of 0 meant "fill the left slot." Here, a count of 1 means "the left slot is the last one filled."'],
+        ['updateDice( leftDice, leftDiceLabel, 0, False )', ic('False') + ' means remove. The removing branch never uses ' + ic('numSides') + ', but updateDice() needs all 4 arguments, so we pass a placeholder 0.'],
+        ['elif (app.diceCount == 3):', 'There is no ' + ic('else') + '. If there are 0 dice, nothing matches and nothing happens, which is exactly right.']
+      ] }
+  ],
+  tests: [
+    { id: 't7a', title: 'Add three, remove one', code: py`
+addDice(6)
+addDice(8)
+addDice(20)
+removeDice()
+print("count:", app.diceCount)`,
+      ask: 'Which die disappears? What is the count?',
+      expected: '<p>The orange 20-sided die on the right disappears. ' + ic('count: 2') + '.</p>' },
+    { id: 't7b', title: 'Remove more dice than there are', code: py`
+addDice(4)
+addDice(6)
+removeDice()
+removeDice()
+removeDice()
+print("count:", app.diceCount)`,
+      ask: 'Will the third removeDice() crash? Will the count go to -1?',
+      expected: '<p>No crash, and ' + ic('count: 0') + '. On the third call no condition matches, so the function does nothing. The count never goes negative.</p>' }
+  ],
+  mcq: { q: 'Why does removeDice() pass 0 as the numSides argument?',
+    opts: ['updateDice() needs 4 arguments, and the removing branch ignores numSides', 'A removed die has 0 sides, and updateDice uses that to pick its shape', 'To reset app.diceCount to 0', 'CMU requires numbers to start at 0'], a: 0,
+    fb: 'A function call must match its parameters. The removing branch never reads numSides, so any number would work. 0 is a sensible placeholder.' },
+  big: 'In onMousePress(), clicking any die will call removeDice(). In this version the rightmost die is always removed, even if you click a different one. Google\'s version removes the die you click (that\'s a possible extension).'
+},
+{
+  id: 'step-8', fn: 'onMousePress', sig: 'onMousePress(mouseX, mouseY)', color: C.blue, shape: { type: 'rect' },
+  job: 'Figure out what was clicked and call the right function.',
+  params: ic('mouseX') + ', ' + ic('mouseY'), returns: 'nothing', calls: ['rollAllDice', 'addDice', 'removeDice', 'totalDice'], calledBy: ['CMU (on every click)'],
+  why: '<p>This is the traffic controller. CMU calls it automatically whenever you click, and passes in the click\'s coordinates as arguments. You never call it yourself. Because every real job is already its own function, each branch here is just one or two lines.</p>',
+  callout: '<strong>Before you start this step</strong><p>Comment out or delete <em>all</em> the test code at the bottom of your program. Otherwise your test dice will appear every time the program starts, and clicking will look broken.</p>',
+  calloutWarn: true,
+  starter: py`
+def onMousePress( mouseX, mouseY ):
+    #Function: checks to see if a button or dice was clicekd and updates the canvas
+    #Parameters (datatype): mouseX (integer) - x coordinate of mouse when button was released
+    #                       mouseY (integer) - y coordinate of mouse when button was released
+    #Return: none
+    pass`,
+  chunks: [
+    { title: 'Debug prints', code: py`
+    print("Function Called: onMousePress( ) ")
+    print("parameters: ", "x: ", mouseX, "y: ", mouseY , '\n')`,
+      lines: [['print("parameters: ", "x: ", mouseX, "y: ", mouseY , \'\\n\')', 'Shows where you clicked. When a button "doesn\'t work," this tells you whether the click was even inside it.']] },
+    { title: 'The Roll button', code: py`
+    if( rollButton.hits(mouseX, mouseY) ):
+        print(" Hit the Roll Button", '\n')
+        rollAllDice()`,
+      lines: [
+        ['if( rollButton.hits(mouseX, mouseY) ):', ic('.hits(x, y)') + ' is True when the point is inside the shape. That\'s much easier than checking coordinates by hand.'],
+        ['rollAllDice()', 'One line does everything the Roll button needs.']
+      ] },
+    { title: 'The dice buttons', code: py`
+    elif( dice4Button.hits(mouseX, mouseY ) ):
+        print(" Hit Dice 4 Button", '\n')
+        addDice(4)
+    elif( dice6Button.hits(mouseX, mouseY ) ):
+        print(" Hit Dice 6 Button", '\n')
+        addDice(6)
+
+    #Student must added the additionl dice button checks`,
+      lines: [
+        ['addDice(4)', 'Each dice button calls the same function with its own number.'],
+        ['#Student must added the additionl dice button checks', 'You\'ll add four more ' + ic('elif') + ' branches here (8, 10, 12, 20) in the final challenge, following this exact pattern.']
+      ] },
+    { title: 'The +/- offset button', code: py`
+    elif( plusMinusButton.hits(mouseX, mouseY ) ):
+        offset = int( app.getTextInput("Enter an offset value (+/-) to add to dice total.") )
+        if (offset > 0):
+            plusMinusLabel.value = "+" + str( offset )
+        elif (offset < 0):
+            plusMinusLabel.value = offset
+        elif (offset == 0):
+            plusMinusLabel.value = "+/-"
+
+        totalDice()`,
+      lines: [
+        ['offset = int( app.getTextInput("...") )', ic('app.getTextInput') + ' pops up a box and returns what the user typed, as text. ' + ic('int()') + ' turns it into a number.'],
+        ['plusMinusLabel.value = "+" + str( offset )', 'Positive numbers don\'t show a plus sign on their own, so we build the text "+3". Negative numbers already show their minus sign.'],
+        ['plusMinusLabel.value = "+/-"', 'An offset of 0 resets the button. Now you can see why totalDice() checks for "+/-".'],
+        ['totalDice()', 'The offset changed, so the total has to be recalculated.']
+      ] },
+    { title: 'Clicking a die removes one', code: py`
+    elif( leftDice.hits(mouseX, mouseY) ):
+        removeDice()
+    elif( middleDice.hits(mouseX, mouseY) ):
+        removeDice()
+    elif( rightDice.hits(mouseX, mouseY) ):
+        removeDice()
+
+
+    print("Returned from Function: onMousePress( )", '\n')`,
+      lines: [
+        ['removeDice()', 'Whichever die you click, the rightmost one is removed.'],
+        ['print("Returned from Function: onMousePress( )", \'\\n\')', 'Indented 4 spaces, outside the if/elif chain, so it prints after every click.']
+      ] }
+  ],
+  tests: [
+    { id: 't8a', title: 'Click Roll with no dice', code: '', manual: 'Run the program and click <strong>Roll</strong> before adding any dice.',
+      ask: 'What will the console show? What will the total be?',
+      expected: '<p>onMousePress prints your click coordinates, then "Hit the Roll Button" and "Roll all dice". rollDice is called 3 times with ' + ic('numSides:  0') + ', each roll is 0, and the total stays 0.</p>' },
+    { id: 't8b', title: 'Add dice and roll', code: '', manual: 'Click the <strong>4</strong> button, then the <strong>6</strong> button, then <strong>Roll</strong> three times.',
+      ask: 'What appears after each click? Does the total change on every roll?',
+      expected: '<p>A green triangle appears on the left, then a light-blue square in the middle (higher up). Each roll gives both dice new numbers, and the total always equals their sum.</p>' },
+    { id: 't8c', title: 'Use the offset', code: '', manual: 'With dice on the canvas, click <strong>+/-</strong> and type 3. Then try -5. Then try 0.',
+      ask: 'Predict the button label and the total after each one.',
+      expected: '<p>3 shows "+3" and adds 3 to the total. -5 shows "-5" and subtracts 5. 0 resets the button to "+/-" and the total goes back to just the dice. (Typing a word like "five" crashes the program, because ' + ic('int("five")') + ' isn\'t possible. Handling that is an extension.)</p>' },
+    { id: 't8d', title: 'Remove by clicking', code: '', manual: 'Add three dice, then click the <strong>left</strong> die.',
+      ask: 'Which die disappears?',
+      expected: '<p>The <em>right</em> die. Every die click calls removeDice(), which always removes the last die added.</p>' }
+  ],
+  mcq: { q: 'With 2 dice on the canvas, you click Roll once. Counting onMousePress itself, how many function calls happen?',
+    opts: ['1', '3', '6', '8'], a: 2,
+    fb: '6: onMousePress → rollAllDice → rollDice, rollDice, rollDice → totalDice. One click, six small functions, each doing one job.' },
+  big: 'onMousePress() sits at the top of the function map. It calls rollAllDice(), addDice(), removeDice() and totalDice(), which call everything else. Follow one click on the map at the top of this page to see the whole chain.'
+}
+];
+
+const CHALLENGE = { id: 'challenge', fn: 'Finish the buttons', color: C.d20, shape: { points: 5, dashed: true } };
+const ALL = STEPS.concat([CHALLENGE]);
+const byFn = {}; STEPS.forEach(s => byFn[s.fn] = s);
+
+/* ---------- function map ---------- */
+const NODES = {
+  onMousePress: [360, 40], rollAllDice: [140, 140], addDice: [430, 140], removeDice: [630, 140],
+  updateDice: [530, 228], rollDice: [120, 314], totalDice: [330, 314], getDiceColor: [590, 314]
+};
+const EDGES = [];
+STEPS.forEach(s => s.calls.forEach(c => EDGES.push([s.fn, c])));
+const svg = document.getElementById('map');
+const gE = document.getElementById('edges'), gN = document.getElementById('nodes');
+const W = 138, H = 34;
+EDGES.forEach(([a, b]) => {
+  const [x1, y1] = NODES[a], [x2, y2] = NODES[b];
+  const sx = x1 + (x2 - x1) * 0.12, ex = x2 - (x2 - x1) * 0.06;
+  const p = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  p.setAttribute('x1', sx); p.setAttribute('y1', y1 + H / 2);
+  p.setAttribute('x2', ex); p.setAttribute('y2', y2 - H / 2 - 2);
+  p.setAttribute('class', 'edge'); p.setAttribute('marker-end', 'url(#arr)');
+  p.dataset.from = a; p.dataset.to = b;
+  gE.appendChild(p);
+});
+Object.keys(NODES).forEach(fn => {
+  const [x, y] = NODES[fn], s = byFn[fn];
+  const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  g.setAttribute('class', 'node'); g.setAttribute('tabindex', '0'); g.setAttribute('role', 'button');
+  g.setAttribute('aria-label', fn + ', step ' + (STEPS.indexOf(s) + 1));
+  g.innerHTML = '<rect x="' + (x - W / 2) + '" y="' + (y - H / 2) + '" width="' + W + '" height="' + H + '" rx="8"/>' +
+    '<circle cx="' + (x - W / 2 + 14) + '" cy="' + y + '" r="5" fill="' + s.color + '"/>' +
+    '<text x="' + (x + 6) + '" y="' + (y + 4.5) + '" text-anchor="middle">' + fn + '()</text>';
+  const light = on => {
+    svg.classList.toggle('dim', on);
+    g.classList.toggle('lit', on);
+    gE.querySelectorAll('.edge').forEach(e => e.classList.toggle('lit', on && e.dataset.from === fn));
+    gN.querySelectorAll('.node').forEach(n => { if (n !== g) n.classList.remove('lit'); });
+    if (on) EDGES.filter(e => e[0] === fn).forEach(e => { const n = gN.querySelector('[data-fn="' + e[1] + '"]'); if (n) n.classList.add('lit'); });
+  };
+  g.dataset.fn = fn;
+  g.addEventListener('mouseenter', () => light(true));
+  g.addEventListener('mouseleave', () => light(false));
+  g.addEventListener('focus', () => light(true));
+  g.addEventListener('blur', () => light(false));
+  const go = () => { location.hash = s.id; document.getElementById('build').scrollIntoView({ behavior: 'smooth' }); };
+  g.addEventListener('click', go);
+  g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
+  gN.appendChild(g);
+});
+
+/* ---------- stepper ---------- */
+const stepper = document.getElementById('stepper'), panel = document.getElementById('panel');
+function renderStepper(cur) {
+  stepper.innerHTML = ALL.map((s, i) => {
+    const label = s.id === 'challenge' ? 'Challenge' : s.fn + '()';
+    const num = s.id === 'challenge' ? '9' : String(i + 1);
+    return '<button type="button" class="stepbtn' + (store.done[s.id] ? '' : ' todo') + '" data-id="' + s.id + '"' + (s.id === cur ? ' aria-current="step"' : '') + '>' +
+      dieSVG(s.shape, s.color, num, 30) + '<span class="lbl">' + label + '</span>' + (store.done[s.id] ? '<span class="done" aria-label="done">✓</span>' : '') + '</button>';
+  }).join('');
+  stepper.querySelectorAll('.stepbtn').forEach(b => b.addEventListener('click', () => { location.hash = b.dataset.id; }));
+  const n = STEPS.filter(s => store.done[s.id]).length;
+  document.getElementById('progText').textContent = n + ' of 8 functions tested' + (store.done.challenge ? ' · challenge done' : '');
+  document.getElementById('progBar').style.width = (n / 8 * 100) + '%';
+  renderSide(cur);
+}
+
+const side = document.getElementById('sidenav');
+function renderSide(cur) {
+  const n = STEPS.filter(s => store.done[s.id]).length;
+  const link = (href, txt) => '<a class="sn-link" href="#' + href + '">' + txt + '</a>';
+  side.innerHTML = '<p class="eyebrow">Dice Roller guide</p>' +
+    '<div class="sn-prog"><span>' + n + ' of 8 functions done' + (store.done.challenge ? ' + challenge' : '') + '</span><div class="progress-bar"><span style="width:' + (n / 8 * 100) + '%"></span></div></div>' +
+    '<p class="sn-group">Get started</p>' + link('h-how', 'How this guide works') + link('h-why', 'Why functions?') + link('h-ideas', 'Four big ideas') + link('h-name', 'Your name') +
+    '<p class="sn-group">Build it</p><ol class="sn-steps">' + ALL.map((s, i) => {
+      const done = !!store.done[s.id], num = s.id === 'challenge' ? '9' : String(i + 1);
+      return '<li><button type="button" class="sn-step' + (done ? ' done' : ' todo') + '" data-id="' + s.id + '"' + (s.id === cur ? ' aria-current="step"' : '') + '>' +
+        dieSVG(s.shape, s.color, num, 24) + '<span>' + (s.id === 'challenge' ? 'Challenge' : s.fn + '()') + '</span>' + (done ? '<span class="tick" aria-label="done">✓</span>' : '') + '</button></li>';
+    }).join('') + '</ol>' +
+    '<p class="sn-group">Submit</p>' + link('h-upload', 'Work from another computer') + link('h-log', 'Testing Log');
+  side.querySelectorAll('.sn-step').forEach(b => b.addEventListener('click', () => { location.hash = b.dataset.id; document.getElementById('build').scrollIntoView({ behavior: 'smooth' }); }));
+}
+
+function fnChips(list) {
+  if (!list.length) return '<span class="muted">nothing (it\'s a helper)</span>';
+  return list.map(f => byFn[f] ? '<button type="button" class="fnlink" data-go="' + byFn[f].id + '">' + f + '()</button>' : '<span>' + f + '</span>').join(', ');
+}
+
+function shapesStrip() {
+  const rows = [[4, 3, 0, C.d4], [6, 4, 45, C.d6], [8, 6, 0, C.d8], [10, 8, 0, C.d10], [12, 10, 0, C.d12], [20, 5, 0, C.d20]];
+  return '<div class="shapes">' + rows.map(r => '<div class="shape">' + dieSVG({ points: r[1], rot: r[2] }, r[3], '', 44) + '<b>' + r[0] + '-sided</b>points = ' + r[1] + '</div>').join('') + '</div>';
+}
+
+function renderStep(s, idx) {
+  const rev = Math.min(store.reveal[s.id] || 1, s.chunks.length);
+  let h = '';
+  h += '<div class="step-title">' + dieSVG(s.shape, s.color, String(idx + 1), 56) + '<div><p class="eyebrow">Step ' + (idx + 1) + ' of 8</p><h3>' + esc(s.sig) + '</h3><p class="job">' + s.job + '</p></div></div>';
+  h += '<dl class="sig"><div><dt>Parameters</dt><dd>' + s.params + '</dd></div><div><dt>Returns</dt><dd>' + s.returns + '</dd></div><div><dt>Calls</dt><dd>' + fnChips(s.calls) + '</dd></div><div><dt>Called by</dt><dd>' + fnChips(s.calledBy) + '</dd></div></dl>';
+  h += tutorBar();
+  h += '<div class="sub"><h4>Why is this its own function?</h4>' + s.why + (s.extra || '') + '</div>';
+  if (s.callout) h += '<div class="callout' + (s.calloutWarn ? ' warn' : '') + '">' + s.callout + '</div>';
+
+  h += '<div class="sub"><h4>Build it</h4><p>This is already in your starter code. You\'ll replace <code>pass</code> with the chunks below, in order.</p>' + pre(s.starter);
+  s.chunks.forEach((c, i) => {
+    if (i >= rev) return;
+    h += '<div class="chunk' + (c.tryFirst ? ' tryfirst' : '') + '"><div class="chunk-head"><span class="n">Chunk ' + (i + 1) + ' of ' + s.chunks.length + '</span><h4>' + c.title + '</h4></div>';
+    if (c.tryFirst) {
+      const shown = store.reveal[s.id + ':try' + i];
+      h += '<div class="callout"><strong>Try it first</strong><p>' + c.tryFirst + '</p></div>';
+      if (!shown) { h += '<div class="btn-row"><button type="button" class="btn ghost" data-try="' + i + '">I wrote mine, show the answer</button></div></div>'; return; }
+    }
+    if (c.shapes) h += shapesStrip();
+    h += pre(c.code);
+    h += '<ul class="lines">' + c.lines.map(l => '<li>' + ic(l[0]) + '<span>' + l[1] + '</span></li>').join('') + '</ul>';
+    if (c.spot) h += '<div class="callout"><strong>Spot the repeat</strong><p>' + c.spot + '</p></div>';
+    h += '</div>';
+  });
+  const lastTryBlocked = s.chunks[rev - 1] && s.chunks[rev - 1].tryFirst && !store.reveal[s.id + ':try' + (rev - 1)];
+  if (rev < s.chunks.length) {
+    h += '<div class="btn-row"><button type="button" class="btn" data-more="1"' + (lastTryBlocked ? ' disabled' : '') + '>Show chunk ' + (rev + 1) + ' of ' + s.chunks.length + '</button><span class="muted">Type this chunk into your code first.</span></div>';
+  } else if (!lastTryBlocked) {
+    const full = clean(s.starter).replace(/\n\s*pass$/, '') + '\n' + s.chunks.map(c => clean(c.code)).join('\n\n');
+    h += '<details class="full"><summary>See the whole finished function</summary>' + pre(full) + '<p class="muted">Compare it with yours line by line, especially the indentation.</p></details>';
+  }
+  h += '</div>';
+
+  h += '<div class="sub"><h4>Test it: predict, run, paste</h4><p>Type each test at the very bottom of your program, exactly as shown. Write your prediction <em>before</em> you run it. Then paste the actual console output into the box here and compare.' + (s.id === 'step-1' ? ' (The first console line, <code>GLOBAL: leftDice.sides: 0</code>, comes from the variable section and prints every time you run.)' : '') + '</p>';
+  s.tests.forEach((t, ti) => {
+    const v = store.tests[t.id] || {};
+    h += '<div class="test" data-test="' + t.id + '"><div class="test-head"><strong>Test ' + (ti + 1) + ': ' + t.title + '</strong></div><div class="test-body">';
+    h += t.code ? pre(t.code) : '<p>' + t.manual + '</p>';
+    if (t.note) h += '<div class="callout"><p>' + t.note + '</p></div>';
+    h += '<p><strong>Predict:</strong> ' + t.ask + '</p>';
+    h += '<div class="pa"><div><label for="p-' + t.id + '">My prediction</label><textarea id="p-' + t.id + '" data-field="p">' + esc(v.p || '') + '</textarea></div>' +
+      '<div><label for="a-' + t.id + '">Actual output (paste from the console)</label><textarea id="a-' + t.id + '" data-field="a">' + esc(v.a || '') + '</textarea></div></div>';
+    const ready = (v.p || '').trim() && (v.a || '').trim();
+    h += '<div class="btn-row"><button type="button" class="btn ghost" data-compare="' + t.id + '"' + (ready ? '' : ' disabled') + '>Compare with the expected result</button>' + (ready ? '' : '<span class="muted">Fill in both boxes first.</span>') + '</div>';
+    h += '<div class="expected" id="x-' + t.id + '"' + (v.shown ? '' : ' hidden') + '><strong>Expected</strong>' + t.expected + '<p class="muted">Did your prediction match? If not, figure out which line surprised you.</p></div>';
+    h += '</div></div>';
+  });
+  h += '</div>';
+
+  const m = s.mcq, pick = store.mcq[s.id];
+  h += '<div class="sub"><h4>Check yourself</h4><p>' + esc(m.q) + '</p><div class="mcq">' +
+    m.opts.map((o, i) => '<button type="button" class="opt' + (pick !== undefined && i === m.a ? ' right' : '') + (pick === i && i !== m.a ? ' wrong' : '') + '" data-opt="' + i + '">' + esc(o) + '</button>').join('') + '</div>' +
+    (pick !== undefined ? '<div class="feedback"><strong>' + (pick === m.a ? 'Yes. ' : 'Not quite. ') + '</strong>' + esc(m.fb) + '</div>' : '') + '</div>';
+
+  h += '<div class="bigpic"><p class="eyebrow">The big picture</p><p>' + s.big + '</p></div>';
+  h += footer(s, idx, 'I ran every test for ' + s.fn + '()');
+  return h;
+}
+
+const FLINT = 'https://app.flintk12.com/activities/dice-roller-pro-5e9344';
+function tutorBar() {
+  return '<div class="tutor"><p><strong>Stuck?</strong> Copy where you are, then paste it into the Flint tutor with your question.</p>' +
+    '<div class="btn-row"><button type="button" class="btn ghost" data-ctx="1">Copy my question context</button>' +
+    '<a class="btn" href="' + FLINT + '" target="_blank" rel="noopener">Ask the Flint tutor ↗</a></div></div>';
+}
+function contextText(s, idx) {
+  if (s.id === 'challenge') return 'I\'m working on the Dice Roller project in CMU CS Academy. I\'m on the final challenge: adding the 8, 10, 12 and 20-sided dice buttons and their elif checks in onMousePress. Please give me hints, not the code. My question: ';
+  const rev = Math.min(store.reveal[s.id] || 1, s.chunks.length);
+  return 'I\'m working on the Dice Roller project in CMU CS Academy. I\'m on Step ' + (idx + 1) + ' of 8: ' + s.sig + '. I\'ve worked through chunk ' + rev + ' of ' + s.chunks.length + ' ("' + s.chunks[rev - 1].title + '"). My question: ';
+}
+function footer(s, idx, text) {
+  const prev = ALL[idx - 1], next = ALL[idx + 1];
+  return '<div class="step-foot"><label class="check"><input type="checkbox" id="done-' + s.id + '"' + (store.done[s.id] ? ' checked' : '') + '> ' + text + '</label>' +
+    '<div class="btn-row">' + (prev ? '<button type="button" class="btn ghost" data-nav="' + prev.id + '">← Back</button>' : '') +
+    (next ? '<button type="button" class="btn" data-nav="' + next.id + '">Next: ' + (next.id === 'challenge' ? 'the challenge' : next.fn + '()') + ' →</button>' : '') + '</div></div>';
+}
+
+const FILL = [
+  { s: 8, mult: '3', pts: '6', col: 'gPurple' },
+  { s: 10, mult: '4', pts: '8', col: 'gPink' },
+  { s: 12, mult: '5', pts: '10', col: 'gRed' },
+  { s: 20, mult: '6', pts: '5', col: 'gOrange' }
+];
+function renderChallenge(idx) {
+  let h = '<div class="step-title">' + dieSVG(CHALLENGE.shape, CHALLENGE.color, '9', 56) + '<div><p class="eyebrow">Final challenge</p><h3>Finish the 8, 10, 12 and 20 buttons</h3><p class="job">No code this time. You\'ve seen the pattern; now you write it.</p></div></div>' + tutorBar();
+  h += '<div class="sub"><h4>Part A: Plan the buttons</h4><p>Look at how <code>dice6Button</code> is made in the variable section of your code, and read the comment above each missing button. Fill in the table, then check it.</p>' +
+    '<div class="tablewrap"><table class="fill"><thead><tr><th>Button</th><th>app.dX4 = app.dXspacing * ?</th><th>points</th><th>fill color variable</th></tr></thead><tbody>' +
+    FILL.map(r => {
+      const v = store.fill[r.s] || {};
+      return '<tr><td><strong>' + r.s + '-sided</strong></td>' +
+        ['mult', 'pts', 'col'].map(k => '<td><input id="f-' + r.s + '-' + k + '" data-fill="' + r.s + '" data-k="' + k + '" value="' + esc(v[k] || '') + '" aria-label="' + r.s + '-sided ' + k + '"' + (k === 'col' ? ' placeholder="app.g…"' : '') + '></td>').join('') + '</tr>';
+    }).join('') + '</tbody></table></div>' +
+    '<div class="btn-row"><button type="button" class="btn ghost" id="checkFill">Check my table</button><span id="fillMsg" class="muted" aria-live="polite"></span></div></div>';
+  h += '<div class="sub"><h4>Part B: Write the button code</h4><ul style="margin:0;padding-left:1.2em;display:grid;gap:8px">' +
+    '<li>Under each "(student to add)" comment, follow the <code>dice6Button</code> pattern: set <code>app.dX4</code>, create <code>dice8Button</code> (and so on), set its <code>.sides</code>, and make its label.</li>' +
+    '<li>Only the 6-sided button needs <code>rotateAngle = 45</code>. Leave it out for the others.</li>' +
+    '<li>Don\'t forget the <code>.sides</code> line. The label reads its number from <code>dice8Button.sides</code>.</li>' +
+    '<li>Why not <code>fill=getDiceColor(8)</code>? The button code runs near the top of the file, <em>before</em> Python has reached <code>def getDiceColor</code>, so the function doesn\'t exist yet and you\'d get an error. Use the color variables instead.</li></ul></div>';
+  h += '<div class="sub"><h4>Part C: Make them clickable</h4><p>In <code>onMousePress</code>, find the comment <code>#Student must added the additionl dice button checks</code>. Add four <code>elif</code> branches that follow the <code>dice6Button</code> pattern, each calling <code>addDice()</code> with the right number.</p></div>';
+  h += '<div class="sub"><h4>Part D: Test against the finished version</h4><p>Open the <a href="https://academy.cs.cmu.edu/sharing/turquoiseCrocodile402747" target="_blank" rel="noopener">finished version</a> side by side with yours. Click every button, fill all 3 slots, trigger the "3 Dice Max" warning, remove dice, and try the offset. Every shape and color should match.</p></div>';
+  h += '<div class="callout"><strong>Extension: make it DRY</strong><p>You just wrote the same 4-line button pattern four more times. That\'s the DRY warning sign. Write a function like <code>makeDiceButton(numSides, points, position, color)</code> that creates the button and its label and <strong>returns</strong> the button, so you can write <code>dice8Button = makeDiceButton(8, 6, 3, app.gPurple)</code>. Where in the file does the <code>def</code> have to go for that to work?</p></div>';
+  h += '<div class="callout"><strong>Extension: remove the die you click</strong><p>Google removes the exact die you click. Change your code so clicking the left die removes the left die, and the remaining dice slide over. Which functions would you need to change, and which could stay the same?</p></div>';
+  h += footer(CHALLENGE, idx, 'All my buttons work like the finished version');
+  return h;
+}
+
+/* ---------- routing & events ---------- */
+let curStep = 'step-1';
+function current() { const h = location.hash.slice(1); if (ALL.find(s => s.id === h)) curStep = h; return curStep; }
+function render() {
+  const id = current(), idx = ALL.findIndex(s => s.id === id), s = ALL[idx];
+  renderStepper(id);
+  panel.innerHTML = id === 'challenge' ? renderChallenge(idx) : renderStep(s, idx);
+  bind(s);
+}
+function bind(s) {
+  panel.querySelectorAll('[data-nav]').forEach(b => b.addEventListener('click', () => { location.hash = b.dataset.nav; document.getElementById('build').scrollIntoView({ behavior: 'smooth' }); }));
+  panel.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => { location.hash = b.dataset.go; }));
+  const done = panel.querySelector('#done-' + s.id);
+  if (done) done.addEventListener('change', () => { store.done[s.id] = done.checked; if (done.checked) store.doneAt[s.id] = Date.now(); else delete store.doneAt[s.id]; save(); renderStepper(s.id); });
+  const ctxBtn = panel.querySelector('[data-ctx]');
+  if (ctxBtn) ctxBtn.addEventListener('click', () => {
+    const idx = ALL.findIndex(x => x.id === s.id);
+    copyText(contextText(s, idx), () => { ctxBtn.textContent = 'Copied. Paste it into Flint'; setTimeout(() => ctxBtn.textContent = 'Copy my question context', 2500); }, () => { ctxBtn.textContent = 'Copy failed. Tell Flint your step number'; });
+  });
+  if (s.id === 'challenge') {
+    panel.querySelectorAll('[data-fill]').forEach(inp => inp.addEventListener('input', () => {
+      const r = store.fill[inp.dataset.fill] = store.fill[inp.dataset.fill] || {}; r[inp.dataset.k] = inp.value; save(); inp.classList.remove('ok', 'no');
+    }));
+    panel.querySelector('#checkFill').addEventListener('click', () => {
+      let right = 0;
+      FILL.forEach(r => ['mult', 'pts', 'col'].forEach(k => {
+        const inp = panel.querySelector('#f-' + r.s + '-' + k);
+        let val = inp.value.trim().replace(/^app\./i, '');
+        const ok = k === 'col' ? val.toLowerCase() === r.col.toLowerCase() : val === r[k];
+        inp.classList.toggle('ok', ok); inp.classList.toggle('no', !ok); if (ok) right++;
+      }));
+      panel.querySelector('#fillMsg').textContent = right === 12 ? 'All 12 correct. Go write the code.' : right + ' of 12 correct. Check the comments above each button in your starter code.';
+    });
+    return;
+  }
+  const more = panel.querySelector('[data-more]');
+  if (more) more.addEventListener('click', () => { store.reveal[s.id] = (store.reveal[s.id] || 1) + 1; save(); render(); });
+  panel.querySelectorAll('[data-try]').forEach(b => b.addEventListener('click', () => { store.reveal[s.id + ':try' + b.dataset.try] = true; save(); render(); }));
+  panel.querySelectorAll('.test').forEach(box => {
+    const id = box.dataset.test, btn = box.querySelector('[data-compare]');
+    box.querySelectorAll('textarea').forEach(ta => ta.addEventListener('input', () => {
+      const v = store.tests[id] = store.tests[id] || {}; v[ta.dataset.field] = ta.value; v.at = Date.now(); save();
+      const ready = (v.p || '').trim() && (v.a || '').trim();
+      btn.disabled = !ready;
+      const hint = btn.nextElementSibling; if (hint && ready) hint.remove();
+    }));
+    btn.addEventListener('click', () => { const v = store.tests[id] = store.tests[id] || {}; v.shown = true; save(); box.querySelector('#x-' + id).hidden = false; });
+  });
+  panel.querySelectorAll('[data-opt]').forEach(b => b.addEventListener('click', () => { store.mcq[s.id] = +b.dataset.opt; save(); render(); }));
+}
+function copyText(text, ok, fail) {
+  try { navigator.clipboard.writeText(text).then(ok, fail); } catch (e) { fail(); }
+}
+window.addEventListener('hashchange', render);
+render();
+
+/* ---------- testing log ---------- */
+const nameEl = document.getElementById('studentName');
+nameEl.value = store.name || '';
+nameEl.addEventListener('input', () => { store.name = nameEl.value; save(); });
+document.getElementById('copyLog').addEventListener('click', () => {
+  const now = Date.now();
+  let today = 0, tested = 0;
+  STEPS.forEach(s => s.tests.forEach(t => { const v = store.tests[t.id] || {}; if ((v.a || '').trim()) tested++; if (v.at && sameDay(v.at, now)) today++; }));
+  const doneCount = STEPS.filter(s => store.done[s.id]).length;
+  const lines = ['Dice Roller testing log', 'Name: ' + (store.name || '(not entered)'), 'Log copied: ' + stamp(now),
+    'Progress: ' + doneCount + ' of 8 functions checked off, ' + tested + ' tests with actual output, ' + today + ' tests worked on today', ''];
+  if (store.restoredAt) lines.splice(4, 0, 'Includes work brought in from another computer (last added ' + stamp(store.restoredAt) + ')');
+  STEPS.forEach((s, i) => {
+    lines.push('== Step ' + (i + 1) + ': ' + s.sig + (store.done[s.id] ? '  [done' + (store.doneAt[s.id] ? ' ' + stamp(store.doneAt[s.id]) : '') + ']' : '') + ' ==');
+    s.tests.forEach((t, ti) => {
+      const v = store.tests[t.id] || {};
+      lines.push('Test ' + (ti + 1) + ': ' + t.title + (v.at ? '  (last edited ' + stamp(v.at) + (sameDay(v.at, now) ? ', NEW TODAY' : '') + ')' : '  (not started)'));
+      lines.push('  Prediction: ' + ((v.p || '').trim().replace(/\n/g, '\n              ') || '(blank)'));
+      lines.push('  Actual:     ' + ((v.a || '').trim().replace(/\n/g, '\n              ') || '(blank)'));
+    });
+    lines.push('');
+  });
+  lines.push('Challenge: ' + (store.done.challenge ? 'done' + (store.doneAt.challenge ? ' ' + stamp(store.doneAt.challenge) : '') : 'not checked off'));
+  if (store.codeCheck) {
+    const cc = store.codeCheck, label = { full: 'written', partial: 'partly written', none: 'not found' };
+    lines.push('', 'Code check from PDF: ' + cc.file + ' (checked ' + stamp(cc.at) + (sameDay(cc.at, now) ? ', NEW TODAY' : '') + ')');
+    ALL.forEach(s => lines.push('  ' + (s.id === 'challenge' ? '8/10/12/20 buttons' : s.fn + '()') + ': ' + label[cc.results[s.id]]));
+  }
+  const text = lines.join('\n');
+  const toast = document.getElementById('logToast'), fb = document.getElementById('logFallback');
+  const nameWarn = store.name ? '' : ' Add your name in the box above Build it, then copy again.';
+  copyText(text, () => { toast.textContent = 'Copied ' + stamp(now) + '. Paste it into Canvas.' + nameWarn; fb.hidden = true; },
+    () => { fb.value = text; fb.hidden = false; fb.focus(); fb.select(); toast.textContent = 'Copy the selected text below.'; });
+});
+
+/* ---------- code check from a PDF (read in the browser, never uploaded) ---------- */
+const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/';
+let pdfLib = null;
+async function loadPdfJs() {
+  if (pdfLib) return pdfLib;
+  const [lib, worker] = await Promise.all([import(PDFJS + 'pdf.min.mjs'), import(PDFJS + 'pdf.worker.min.mjs')]);
+  globalThis.pdfjsWorker = worker;
+  lib.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.mjs';
+  pdfLib = lib;
+  return lib;
+}
+async function pdfText(file) {
+  const lib = await loadPdfJs();
+  const doc = await lib.getDocument({ data: new Uint8Array(await file.arrayBuffer()), isEvalSupported: false }).promise;
+  let out = '';
+  for (let i = 1; i <= doc.numPages; i++) {
+    const tc = await (await doc.getPage(i)).getTextContent();
+    out += tc.items.map(it => it.str).join(' ') + '\n';
+  }
+  return out;
+}
+/* Key lines for each function, compared with all spaces removed */
+const MARKERS = {
+  'step-1': ['random.randint(1,numSides)', 'returndiceRoll'],
+  'step-2': ['color=app.gPurple', 'returncolor'],
+  'step-3': ['int(plusMinusLabel.value)', 'totalNumber.value=total'],
+  'step-4': ['leftDiceLabel.value=rollDice(leftDice.sides)', 'rightDiceLabel.value=rollDice(rightDice.sides)'],
+  'step-5': ['dice.points=points', 'app.diceCount+=1', 'app.diceCount-=1'],
+  'step-6': ['updateDice(middleDice,middleDiceLabel,numSides,True)', 'maxDiceLabel1.visible=True'],
+  'step-7': ['updateDice(rightDice,rightDiceLabel,0,False)'],
+  'step-8': ['rollButton.hits(mouseX,mouseY)', 'plusMinusButton.hits(mouseX,mouseY)', 'leftDice.hits(mouseX,mouseY)'],
+  'challenge': ['addDice(8)', 'addDice(10)', 'addDice(12)', 'addDice(20)']
+};
+const pdfIn = document.getElementById('pdfIn'), pdfOut = document.getElementById('pdfResult');
+function renderCheck() {
+  const cc = store.codeCheck;
+  if (!cc) { pdfOut.innerHTML = ''; return; }
+  const label = { full: 'Written', partial: 'Partly written', none: 'Not found' };
+  const canMark = ALL.some(s => cc.results[s.id] === 'full' && !store.done[s.id]);
+  pdfOut.innerHTML = '<div style="display:grid;gap:10px"><p><strong>' + esc(cc.file) + '</strong> · checked ' + stamp(cc.at) + '</p><ul class="cc-list">' +
+    ALL.map((s, i) => '<li class="cc-row">' + dieSVG(s.shape, s.color, s.id === 'challenge' ? '9' : String(i + 1), 22) + '<span>' + (s.id === 'challenge' ? '8/10/12/20 buttons' : s.fn + '()') + '</span><span class="pill ' + cc.results[s.id] + '">' + label[cc.results[s.id]] + '</span></li>').join('') + '</ul>' +
+    (canMark ? '<div class="btn-row"><button type="button" class="btn" id="ccMark">Check off the functions marked Written</button></div>' : '') +
+    '<p class="muted">This looks for key lines of code. It doesn\'t run your program, so you still need to run your tests.</p></div>';
+  const mk = document.getElementById('ccMark');
+  if (mk) mk.addEventListener('click', () => {
+    ALL.forEach(s => { if (cc.results[s.id] === 'full' && !store.done[s.id]) { store.done[s.id] = true; store.doneAt[s.id] = Date.now(); } });
+    save(); render(); renderCheck();
+  });
+}
+pdfIn.addEventListener('change', async () => {
+  const f = pdfIn.files && pdfIn.files[0];
+  if (!f) return;
+  pdfOut.innerHTML = '<p class="muted">Reading ' + esc(f.name) + '…</p>';
+  try {
+    const flat = (await pdfText(f)).replace(/\s+/g, '');
+    if (!flat.includes('defrollDice(')) {
+      pdfOut.innerHTML = '<div class="callout warn"><p>This PDF doesn\'t look like your Dice Roller code: it doesn\'t contain <code>def rollDice(</code>. Choose the PDF of your CMU program and try again.</p></div>';
+    } else {
+      const results = {};
+      Object.keys(MARKERS).forEach(id => { const k = MARKERS[id].filter(m => flat.includes(m)).length; results[id] = k === MARKERS[id].length ? 'full' : k ? 'partial' : 'none'; });
+      store.codeCheck = { file: f.name, at: Date.now(), results };
+      save(); renderCheck();
+    }
+  } catch (e) {
+    console.error(e);
+    pdfOut.innerHTML = '<div class="callout warn"><p>The page couldn\'t read that PDF. Make sure it is a PDF of your code (not a photo or screenshot) and that you\'re connected to the internet, then try again.</p></div>';
+  }
+  pdfIn.value = '';
+});
+renderCheck();
+
+/* ---------- bring in a Testing Log from another computer ---------- */
+function parseStamp(s) {
+  const m = /([A-Z][a-z]{2}) (\d{1,2}), (\d{4}),?\s+(\d{1,2}):(\d{2})\s*([AP]M)/.exec(s || '');
+  if (!m) return null;
+  const mon = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].indexOf(m[1]);
+  if (mon < 0) return null;
+  let h = +m[4] % 12; if (m[6] === 'PM') h += 12;
+  return new Date(+m[3], mon, +m[2], h, +m[5]).getTime();
+}
+function parseLog(text) {
+  const out = { name: '', tests: {}, done: {}, ok: false };
+  let step = null, test = null, field = null;
+  text.replace(/\r/g, '').replace(/ /g, ' ').split('\n').forEach(raw => {
+    let m;
+    if (/^\s*Dice Roller testing log/.test(raw)) { out.ok = true; return; }
+    if (!test && (m = /^Name: (.*)$/.exec(raw))) { const n = m[1].trim(); if (n && n !== '(not entered)') out.name = n; return; }
+    if ((m = /^== Step (\d+): /.exec(raw))) {
+      step = STEPS[+m[1] - 1] || null; test = null; field = null;
+      const d = /\[done(?: (.+?))?\]/.exec(raw);
+      if (step && d) out.done[step.id] = parseStamp(d[1]) || Date.now();
+      return;
+    }
+    if (step && (m = /^Test (\d+): /.exec(raw))) {
+      const t = step.tests[+m[1] - 1]; field = null;
+      test = t ? (out.tests[t.id] = { p: '', a: '', at: null }) : null;
+      const e = /\(last edited (.+?)\)\s*$/.exec(raw);
+      if (test && e) test.at = parseStamp(e[1]);
+      return;
+    }
+    if (test && (m = /^\s*Prediction: ?(.*)$/.exec(raw))) { field = 'p'; test.p = m[1]; return; }
+    if (test && (m = /^\s*Actual: *(.*)$/.exec(raw))) { field = 'a'; test.a = m[1]; return; }
+    if ((m = /^Challenge: (.*)$/.exec(raw))) {
+      if (/^done/.test(m[1])) out.done.challenge = parseStamp(m[1]) || Date.now();
+      step = null; test = null; field = null; return;
+    }
+    if (/^(Code check from PDF|Includes work brought in)/.test(raw)) { step = null; test = null; field = null; return; }
+    if (test && field) test[field] += '\n' + raw.replace(/^ {0,14}/, '');
+  });
+  Object.values(out.tests).forEach(t => {
+    t.p = t.p.replace(/\s+$/, ''); t.a = t.a.replace(/\s+$/, '');
+    if (t.p.trim() === '(blank)') t.p = '';
+    if (t.a.trim() === '(blank)') t.a = '';
+  });
+  return out;
+}
+function mergeLog(o) {
+  let added = 0, keptLocal = 0, doneAdded = 0;
+  Object.keys(o.tests).forEach(id => {
+    const inc = o.tests[id];
+    if (!inc.p.trim() && !inc.a.trim()) return;
+    const cur = store.tests[id] || {};
+    const curHas = (cur.p || '').trim() || (cur.a || '').trim();
+    if (curHas && (cur.at || 0) >= (inc.at || 0)) { if ((cur.p || '') !== inc.p || (cur.a || '') !== inc.a) keptLocal++; return; }
+    store.tests[id] = Object.assign({}, cur, { p: inc.p, a: inc.a, at: inc.at || Date.now(), shown: false });
+    added++;
+  });
+  Object.keys(o.done).forEach(id => { if (!store.done[id]) { store.done[id] = true; store.doneAt[id] = o.done[id]; doneAdded++; } });
+  if (!store.name && o.name) { store.name = o.name; nameEl.value = o.name; }
+  store.restoredAt = Date.now();
+  save(); render();
+  return { added, keptLocal, doneAdded };
+}
+const logIn = document.getElementById('logIn'), logOut = document.getElementById('logResult');
+const plural = (n, word) => n + ' ' + word + (n === 1 ? '' : 's');
+function restoreFrom(text) {
+  const o = parseLog(text || '');
+  if (!o.ok) {
+    logOut.innerHTML = '<div class="callout warn"><p>That doesn\'t look like a Testing Log. A log starts with the line "Dice Roller testing log". Copy the whole log, including that first line, and try again.</p></div>';
+    return;
+  }
+  const r = mergeLog(o);
+  logOut.innerHTML = '<div class="callout"><p><strong>Log added.</strong> Brought in ' + plural(r.added, 'test') + ' and ' + plural(r.doneAdded, 'checked-off step') + '.' +
+    (r.keptLocal ? ' ' + plural(r.keptLocal, 'test') + ' had a newer answer on this computer, so ' + (r.keptLocal === 1 ? 'that one was' : 'those were') + ' kept.' : '') +
+    ' Your Testing Log now includes the work from both computers.</p></div>';
+  logIn.value = '';
+}
+document.getElementById('logRestore').addEventListener('click', () => restoreFrom(logIn.value));
+document.getElementById('logFile').addEventListener('change', async e => {
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
+  try { restoreFrom(await f.text()); }
+  catch (err) { logOut.innerHTML = '<div class="callout warn"><p>The page couldn\'t read that file. Choose a .txt file, or paste the log into the box instead.</p></div>'; }
+  e.target.value = '';
+});
+})();
+</script>
+
+</html>
