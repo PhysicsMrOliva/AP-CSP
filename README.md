@@ -44,6 +44,7 @@ Add `quick: true` to also feature it in the boxes at the top of the page.
 ## Notes on the Dice Roller project guide
 
 - Student work (predictions, outputs, checked-off steps) is saved in their browser on that device. Students who switch computers can paste in a Testing Log and add a PDF of their code under "Worked on another computer?"
-- Students copy their Testing Log at the end of each class and submit it to Canvas. Each log is stamped with the date and time from the student's computer.
+- Students download their Testing Log as a PDF at the end of each class and upload it to Canvas ("Copy as text instead" is the backup). Each log is stamped with the date and time from the student's computer.
+- On another computer, students can choose a Testing Log PDF they downloaded earlier to bring that work back in.
 - The "Ask the Flint tutor" buttons open the Flint activity `dice-roller-pro-5e9344`.
-- The page loads fonts from Google Fonts and its PDF reader from cdnjs, so school filters must allow those.
+- The page loads fonts from Google Fonts and its PDF tools from cdnjs, so school filters must allow those.

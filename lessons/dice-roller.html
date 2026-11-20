@@ -315,7 +315,7 @@ input[type="file"] { font: inherit; font-size: 0.9rem; max-width: 100%; }
     <ol class="howto">
       <li><p>Open your <strong>starter code</strong> in CMU CS Academy. Each function already has its header, comments, and the word <code>pass</code> as a placeholder.</p></li>
       <li><p>Pick a step below. Read what the function does and why it exists, then reveal the code <strong>one chunk at a time</strong>. Type each chunk into your function in place of <code>pass</code>, then delete <code>pass</code>. CMU doesn't let you paste into your program, so you'll type every line, which also helps you notice what each one does.</p></li>
-      <li><p><strong>Test before moving on.</strong> Type the test code at the very bottom of your program, exactly as shown. Write your prediction, run the program, then paste what the console actually printed into this page. Compare the two. Everything you type is saved in your <a href="#h-log">Testing Log</a> at the bottom of this page. At the end of each class, copy the log and submit it to Canvas to show your progress.</p></li>
+      <li><p><strong>Test before moving on.</strong> Type the test code at the very bottom of your program, exactly as shown. Write your prediction, run the program, then paste what the console actually printed into this page. Compare the two. Everything you type is saved in your <a href="#h-log">Testing Log</a> at the bottom of this page. At the end of each class, download the log as a PDF and upload it to Canvas to show your progress.</p></li>
       <li><p>Put a <code>#</code> in front of each test line so it stops running (that's called "commenting it out"), check the step off, and go to the next function.</p></li>
     </ol>
     <p class="intro-text">Where does test code go? Python reads your program from top to bottom. A function has to be defined <em>before</em> a line that calls it runs, so tests always go after all the <code>def</code> blocks:</p>
@@ -388,10 +388,12 @@ input[type="file"] { font: inherit; font-size: 0.9rem; max-width: 100%; }
     <p class="intro-text">Your Testing Log only remembers what you typed in <em>this</em> browser. If you worked at home or on a different computer, bring that work here in two parts: the Testing Log from that computer, and a PDF of your code. Then copy your Testing Log at the bottom of the page as usual.</p>
     <div class="log">
       <h4>1. Bring in your Testing Log</h4>
-      <p>On the other computer, click <strong>Copy my testing log</strong> and save the text somewhere you can open here, like a Google Doc or an email to yourself. Logs you already submitted are also in your Canvas submissions. Paste the whole log below, or choose it as a .txt file.</p>
+      <p>On the other computer, click <strong>Download my Testing Log (PDF)</strong> and save the PDF somewhere you can open here, like Google Drive or an email to yourself. Logs you already submitted are also in your Canvas submissions. Choose that PDF below. (A log you copied as text can be pasted into the box instead.)</p>
       <label for="logIn" class="eyebrow">Paste your Testing Log</label>
       <textarea id="logIn" class="namefield" style="min-height:140px;font-family:var(--font-mono);font-size:0.78rem" placeholder="Dice Roller testing log&#10;Name: …&#10;Log copied: …"></textarea>
-      <div class="btn-row"><button type="button" class="btn" id="logRestore">Add this log to my work</button><label for="logFile" class="muted">or choose a .txt file:</label><input type="file" id="logFile" accept=".txt,text/plain"></div>
+      <label for="logFile" class="eyebrow">Testing Log PDF</label>
+      <input type="file" id="logFile" accept=".pdf,application/pdf,.txt,text/plain">
+      <div class="btn-row"><button type="button" class="btn ghost" id="logRestore">Add the pasted log to my work</button></div>
       <div id="logResult" aria-live="polite"></div>
       <p class="muted">Your answers from both computers are combined. If the same test was done on both, the newer answer is kept.</p>
     </div>
@@ -408,9 +410,10 @@ input[type="file"] { font: inherit; font-size: 0.9rem; max-width: 100%; }
   <section class="block" aria-labelledby="h-log">
     <h2 id="h-log">Your testing log</h2>
     <div class="log">
-      <p><strong>Submit a new log at the end of every class.</strong> Copy it here and paste it into that day's Canvas assignment. Each log is stamped with the date and time you copied it, every test shows when you last worked on it, and anything you worked on today is marked <code>NEW TODAY</code>, so your progress from day to day is easy to see.</p>
+      <p><strong>Submit a new log at the end of every class.</strong> Download it as a PDF here and upload it to that day's Canvas assignment. Each log is stamped with the date and time you made it, every test shows when you last worked on it, and anything you worked on today is marked <code>NEW TODAY</code>, so your progress from day to day is easy to see.</p>
       <p class="muted">Your work is saved in this browser only. Use the same computer and browser each day, or your earlier answers won't be here.</p>
-      <div class="btn-row"><button class="btn" id="copyLog" type="button">Copy my testing log</button><span class="toast" id="logToast" aria-live="polite"></span></div>
+      <div class="btn-row"><button class="btn" id="pdfLog" type="button">Download my Testing Log (PDF)</button><button class="btn ghost" id="copyLog" type="button">Copy as text instead</button></div>
+      <span class="toast" id="logToast" aria-live="polite"></span>
       <textarea id="logFallback" class="namefield" style="min-height:160px;font-family:var(--font-mono);font-size:0.78rem" hidden readonly aria-label="Testing log text"></textarea>
     </div>
   </section>
@@ -1311,12 +1314,12 @@ render();
 const nameEl = document.getElementById('studentName');
 nameEl.value = store.name || '';
 nameEl.addEventListener('input', () => { store.name = nameEl.value; save(); });
-document.getElementById('copyLog').addEventListener('click', () => {
+function buildLog() {
   const now = Date.now();
   let today = 0, tested = 0;
   STEPS.forEach(s => s.tests.forEach(t => { const v = store.tests[t.id] || {}; if ((v.a || '').trim()) tested++; if (v.at && sameDay(v.at, now)) today++; }));
   const doneCount = STEPS.filter(s => store.done[s.id]).length;
-  const lines = ['Dice Roller testing log', 'Name: ' + (store.name || '(not entered)'), 'Log copied: ' + stamp(now),
+  const lines = ['Dice Roller testing log', 'Name: ' + (store.name || '(not entered)'), 'Log made: ' + stamp(now),
     'Progress: ' + doneCount + ' of 8 functions checked off, ' + tested + ' tests with actual output, ' + today + ' tests worked on today', ''];
   if (store.restoredAt) lines.splice(4, 0, 'Includes work brought in from another computer (last added ' + stamp(store.restoredAt) + ')');
   STEPS.forEach((s, i) => {
@@ -1336,11 +1339,87 @@ document.getElementById('copyLog').addEventListener('click', () => {
     lines.push('', 'Code check from PDF: ' + cc.file + ' (checked ' + stamp(cc.at) + (sameDay(cc.at, now) ? ', NEW TODAY' : '') + ')');
     ALL.forEach(s => lines.push('  ' + (s.id === 'challenge' ? '8/10/12/20 buttons' : s.fn + '()') + ': ' + label[cc.results[s.id]]));
   }
-  const text = lines.join('\n');
-  const toast = document.getElementById('logToast'), fb = document.getElementById('logFallback');
-  const nameWarn = store.name ? '' : ' Add your name in the box above Build it, then copy again.';
-  copyText(text, () => { toast.textContent = 'Copied ' + stamp(now) + '. Paste it into Canvas.' + nameWarn; fb.hidden = true; },
-    () => { fb.value = text; fb.hidden = false; fb.focus(); fb.select(); toast.textContent = 'Copy the selected text below.'; });
+  return { text: lines.join('\n'), now };
+}
+const logToast = document.getElementById('logToast'), logFb = document.getElementById('logFallback');
+const nameWarn = () => store.name ? '' : ' Add your name in the box above Build it, then make your log again.';
+
+/* ---------- Testing Log as a PDF (the log text is also tucked inside, so another computer can read it back) ---------- */
+const PDFLIB = 'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js';
+let pdfLibP = null;
+function loadPdfLib() {
+  if (window.PDFLib) return Promise.resolve(window.PDFLib);
+  if (!pdfLibP) pdfLibP = new Promise((res, rej) => {
+    const s = document.createElement('script'); s.src = PDFLIB;
+    s.onload = () => res(window.PDFLib); s.onerror = () => { pdfLibP = null; rej(new Error('PDF library did not load')); };
+    document.head.appendChild(s);
+  });
+  return pdfLibP;
+}
+const toB64 = s => btoa(unescape(encodeURIComponent(s)));
+const fromB64 = s => decodeURIComponent(escape(atob(s)));
+const pdfSafe = s => String(s).replace(/[   ]/g, ' ').replace(/\t/g, '    ').replace(/→/g, '->').replace(/[←]/g, '<-')
+  .replace(/[^\x20-\x7E\xA1-\xFF‘’“”–—…•]/g, '?');
+async function buildLogPdf(text, now) {
+  const { PDFDocument, StandardFonts, rgb } = await loadPdfLib();
+  const doc = await PDFDocument.create();
+  const mono = await doc.embedFont(StandardFonts.Courier), bold = await doc.embedFont(StandardFonts.HelveticaBold), sans = await doc.embedFont(StandardFonts.Helvetica);
+  doc.setTitle('Dice Roller Testing Log - ' + pdfSafe(store.name || 'no name'));
+  doc.setAuthor(pdfSafe(store.name || ''));
+  doc.setCreator('Dice Roller build guide');
+  doc.setSubject('DRLOG1:' + toB64(text));
+  const W = 612, H = 792, M = 54, size = 9, lh = 12, avail = W - 2 * M, maxChars = Math.floor(avail / (size * 0.6));
+  const ink = rgb(0.1, 0.11, 0.17), muted = rgb(0.38, 0.4, 0.48), green = rgb(0.16, 0.48, 0.18);
+  const pages = []; let page, y;
+  const newPage = () => { page = doc.addPage([W, H]); pages.push(page); y = H - M; };
+  newPage();
+  page.drawText('Dice Roller Testing Log', { x: M, y: y - 14, size: 18, font: bold, color: ink });
+  y -= 36;
+  text.split('\n').slice(1).forEach(raw => {
+    if (raw.startsWith('== ')) {
+      if (y < M + 70) newPage();
+      y -= 8;
+      const head = pdfSafe(raw.replace(/^== /, '').replace(/ ==$/, ''));
+      const hs = Math.min(11, 11 * avail / bold.widthOfTextAtSize(head, 11));
+      page.drawText(head, { x: M, y, size: hs, font: bold, color: ink });
+      y -= lh + 4;
+      return;
+    }
+    let s = pdfSafe(raw); const parts = [];
+    while (s.length > maxChars) { parts.push(s.slice(0, maxChars)); s = '              ' + s.slice(maxChars); }
+    parts.push(s);
+    const color = /NEW TODAY/.test(raw) ? green : ink;
+    parts.forEach(p => { if (y < M) newPage(); if (p) page.drawText(p, { x: M, y, size, font: mono, color }); y -= lh; });
+  });
+  pages.forEach((p, i) => p.drawText(pdfSafe((store.name || 'No name') + '   ' + stamp(now) + '   Page ' + (i + 1) + ' of ' + pages.length), { x: M, y: 30, size: 8, font: sans, color: muted }));
+  return doc.save();
+}
+function logFileName(now) {
+  const d = new Date(now), pad = n => String(n).padStart(2, '0');
+  const who = (store.name || 'no name').replace(/[^\p{L}\p{N} _-]/gu, '').trim() || 'no name';
+  return 'Dice Roller Testing Log - ' + who + ' - ' + d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + '.pdf';
+}
+document.getElementById('pdfLog').addEventListener('click', async () => {
+  const btn = document.getElementById('pdfLog');
+  btn.disabled = true; logToast.textContent = 'Making your PDF…'; logFb.hidden = true;
+  const { text, now } = buildLog();
+  try {
+    const bytes = await buildLogPdf(text, now);
+    const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+    const a = document.createElement('a'); a.href = url; a.download = logFileName(now);
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    logToast.textContent = 'Downloaded ' + stamp(now) + '. Upload the PDF to Canvas. If nothing downloaded, use Copy as text instead.' + nameWarn();
+  } catch (e) {
+    console.error(e);
+    logToast.textContent = 'The PDF couldn\'t be made here. Check your internet connection, or use Copy as text instead.';
+  }
+  btn.disabled = false;
+});
+document.getElementById('copyLog').addEventListener('click', () => {
+  const { text, now } = buildLog();
+  copyText(text, () => { logToast.textContent = 'Copied ' + stamp(now) + '. Paste it into Canvas.' + nameWarn(); logFb.hidden = true; },
+    () => { logFb.value = text; logFb.hidden = false; logFb.focus(); logFb.select(); logToast.textContent = 'Copy the selected text below.'; });
 });
 
 /* ---------- code check from a PDF (read in the browser, never uploaded) ---------- */
@@ -1500,8 +1579,18 @@ document.getElementById('logRestore').addEventListener('click', () => restoreFro
 document.getElementById('logFile').addEventListener('change', async e => {
   const f = e.target.files && e.target.files[0];
   if (!f) return;
-  try { restoreFrom(await f.text()); }
-  catch (err) { logOut.innerHTML = '<div class="callout warn"><p>The page couldn\'t read that file. Choose a .txt file, or paste the log into the box instead.</p></div>'; }
+  try {
+    if (/\.pdf$/i.test(f.name) || f.type === 'application/pdf') {
+      logOut.innerHTML = '<p class="muted">Reading ' + esc(f.name) + '…</p>';
+      const lib = await loadPdfJs();
+      const doc = await lib.getDocument({ data: new Uint8Array(await f.arrayBuffer()), isEvalSupported: false }).promise;
+      const meta = await doc.getMetadata();
+      const m = /DRLOG1:([A-Za-z0-9+\/=]+)/.exec((meta && meta.info && meta.info.Subject) || '');
+      if (!m) { logOut.innerHTML = '<div class="callout warn"><p>That PDF isn\'t a Testing Log downloaded from this page. If it\'s a PDF of your code, add it in part 2 below.</p></div>'; }
+      else restoreFrom(fromB64(m[1]));
+    } else restoreFrom(await f.text());
+  }
+  catch (err) { console.error(err); logOut.innerHTML = '<div class="callout warn"><p>The page couldn\'t read that file. Make sure it\'s your Testing Log PDF and that you\'re connected to the internet, then try again.</p></div>'; }
   e.target.value = '';
 });
 })();
