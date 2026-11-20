@@ -212,6 +212,14 @@ table.fill input.no { border-color: var(--bad); background: var(--bad-bg); }
 .log { display: grid; gap: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
 .toast { font-size: 0.85rem; color: var(--ok); font-weight: 600; }
 
+/* Demo GIFs in the header */
+.demos { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 16px; margin-top: 26px; max-width: 900px; align-items: start; }
+.demos figure { margin: 0; display: grid; gap: 8px; min-width: 0; }
+.demos img { display: block; width: 100%; height: auto; border-radius: 10px; border: 1px solid #50566a; background: #22252f; }
+.demos figcaption { color: var(--slate-muted); font-size: 0.88rem; }
+.demos figcaption strong { color: var(--slate-ink); }
+@media (max-width: 620px) { .demos { grid-template-columns: minmax(0, 1fr); } }
+
 /* Side navigation (desktop) */
 .tray .wrap { max-width: 1200px; }
 .map-box { max-width: 900px; }
@@ -256,6 +264,17 @@ input[type="file"] { font: inherit; font-size: 0.9rem; max-width: 100%; }
       <a href="https://academy.cs.cmu.edu/sharing/turquoiseCrocodile402747" target="_blank" rel="noopener">Try the finished version ↗</a>
       <a href="https://share.google/PCoOcoj6POBgq6gYb" target="_blank" rel="noopener">Google's Dice Roller ↗</a>
       <a href="https://app.flintk12.com/activities/dice-roller-pro-5e9344" target="_blank" rel="noopener">Flint AI tutor ↗</a>
+    </div>
+
+    <div class="demos">
+      <figure>
+        <img src="../images/google-dice-roller.gif" width="600" height="389" alt="Google's Dice Roller: dice are added, rolled, and the total updates.">
+        <figcaption><strong>Google's Dice Roller</strong>, the app that inspired this project</figcaption>
+      </figure>
+      <figure>
+        <img src="../images/cmu-dice-roller.gif" width="400" height="400" alt="The finished CMU CS Academy Dice Roller: up to three dice are added, rolled, and totaled.">
+        <figcaption><strong>Our CMU CS Academy version</strong>, what you'll build</figcaption>
+      </figure>
     </div>
 
     <div class="map-box">
