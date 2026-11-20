@@ -494,7 +494,14 @@ for i in range(5):
     print(rollDice(20))`,
       note: '<strong>New syntax:</strong> this test uses a <code>for</code> loop, which runs the indented line 5 times. You\'ll learn how loops work soon. For now, just type the code exactly as shown, including the 4-space indent on the second line.',
       ask: 'Will all five numbers be the same? Could you ever see 0 or 21?',
-      expected: '<p>Five rolls between 1 and 20, usually different. You will never see 0 or 21, because ' + ic('randint(1, 20)') + ' only picks from 1 to 20. Notice that "Function Called: rollDice" printed 5 times: one function, called 5 times.</p>' }
+      expected: '<p>Five rolls between 1 and 20, usually different. You will never see 0 or 21, because ' + ic('randint(1, 20)') + ' only picks from 1 to 20. Notice that "Function Called: rollDice" printed 5 times: one function, called 5 times.</p>'},
+    { id: 't1d', title: 'Roll the other four dice', code: py`
+print(rollDice(4))
+print(rollDice(8))
+print(rollDice(10))
+print(rollDice(12))`,
+      ask: 'What range of numbers could each line print? How many times will "Function Called: rollDice" appear?',
+      expected: '<p>The four returned numbers are 1–4, 1–8, 1–10 and 1–12, in that order. "Function Called: rollDice" appears 4 times, once per call. Together with Tests 1 and 3, you have now tested all six dice: 4, 6, 8, 10, 12 and 20.</p>' }
   ],
   mcq: { q: 'Later, rollAllDice() will roll all 3 dice, and updateDice() will roll each new die. How many times does the line random.randint(1, numSides) need to appear in the whole program?',
     opts: ['Once, inside rollDice()', '3 times, once per die', '4 times, once per place a die gets rolled'], a: 0,
@@ -987,7 +994,10 @@ def onMousePress( mouseX, mouseY ):
       expected: '<p>3 shows "+3" and adds 3 to the total. -5 shows "-5" and subtracts 5. 0 resets the button to "+/-" and the total goes back to just the dice. (Typing a word like "five" crashes the program, because ' + ic('int("five")') + ' isn\'t possible. Handling that is an extension.)</p>' },
     { id: 't8d', title: 'Remove by clicking', code: '', manual: 'Add three dice, then click the <strong>left</strong> die.',
       ask: 'Which die disappears?',
-      expected: '<p>The <em>right</em> die. Every die click calls removeDice(), which always removes the last die added.</p>' }
+      expected: '<p>The <em>right</em> die. Every die click calls removeDice(), which always removes the last die added.</p>'},
+    { id: 't8e', title: 'Click each of the three dice', code: '', manual: 'Add three dice and click the <strong>right</strong> die. Add one more die (back to three) and click the <strong>middle</strong> die. Add one more and click the <strong>left</strong> die. Watch the console after each click.',
+      ask: 'Which die disappears after each click? How many dice are left each time?',
+      expected: '<p>Every time, the <em>right</em> die disappears and 2 dice are left. Each click calls removeDice(), which looks at ' + ic('app.diceCount') + ' (3) and clears the right slot, no matter which die you clicked. The console shows "Dice removed" after each click.</p>' }
   ],
   mcq: { q: 'With 2 dice on the canvas, you click Roll once. Counting onMousePress itself, how many function calls happen?',
     opts: ['1', '3', '6', '8'], a: 2,
@@ -1089,7 +1099,8 @@ function shapesStrip() {
 }
 
 function renderStep(s, idx) {
-  const rev = Math.min(store.reveal[s.id] || 1, s.chunks.length);
+  const allOpen = !!store.done[s.id];
+  const rev = allOpen ? s.chunks.length : Math.min(store.reveal[s.id] || 1, s.chunks.length);
   let h = '';
   h += '<div class="step-title">' + dieSVG(s.shape, s.color, String(idx + 1), 56) + '<div><p class="eyebrow">Step ' + (idx + 1) + ' of 8</p><h3>' + esc(s.sig) + '</h3><p class="job">' + s.job + '</p></div></div>';
   h += '<dl class="sig"><div><dt>Parameters</dt><dd>' + s.params + '</dd></div><div><dt>Returns</dt><dd>' + s.returns + '</dd></div><div><dt>Calls</dt><dd>' + fnChips(s.calls) + '</dd></div><div><dt>Called by</dt><dd>' + fnChips(s.calledBy) + '</dd></div></dl>';
@@ -1102,7 +1113,7 @@ function renderStep(s, idx) {
     if (i >= rev) return;
     h += '<div class="chunk' + (c.tryFirst ? ' tryfirst' : '') + '"><div class="chunk-head"><span class="n">Chunk ' + (i + 1) + ' of ' + s.chunks.length + '</span><h4>' + c.title + '</h4></div>';
     if (c.tryFirst) {
-      const shown = store.reveal[s.id + ':try' + i];
+      const shown = allOpen || store.reveal[s.id + ':try' + i];
       h += '<div class="callout"><strong>Try it first</strong><p>' + c.tryFirst + '</p></div>';
       if (!shown) { h += '<div class="btn-row"><button type="button" class="btn ghost" data-try="' + i + '">I wrote mine, show the answer</button></div></div>'; return; }
     }
@@ -1112,7 +1123,7 @@ function renderStep(s, idx) {
     if (c.spot) h += '<div class="callout"><strong>Spot the repeat</strong><p>' + c.spot + '</p></div>';
     h += '</div>';
   });
-  const lastTryBlocked = s.chunks[rev - 1] && s.chunks[rev - 1].tryFirst && !store.reveal[s.id + ':try' + (rev - 1)];
+  const lastTryBlocked = s.chunks[rev - 1] && s.chunks[rev - 1].tryFirst && !allOpen && !store.reveal[s.id + ':try' + (rev - 1)];
   if (rev < s.chunks.length) {
     h += '<div class="btn-row"><button type="button" class="btn" data-more="1"' + (lastTryBlocked ? ' disabled' : '') + '>Show chunk ' + (rev + 1) + ' of ' + s.chunks.length + '</button><span class="muted">Type this chunk into your code first.</span></div>';
   } else if (!lastTryBlocked) {
@@ -1195,8 +1206,16 @@ function renderChallenge(idx) {
 }
 
 /* ---------- routing & events ---------- */
-let curStep = 'step-1';
-function current() { const h = location.hash.slice(1); if (ALL.find(s => s.id === h)) curStep = h; return curStep; }
+let curStep = null;
+/* the first function not yet checked off, so students land where they left off */
+function nextStepId() { const s = ALL.find(x => !store.done[x.id]); return s ? s.id : 'challenge'; }
+function current() { const h = location.hash.slice(1); if (ALL.find(s => s.id === h)) curStep = h; if (!curStep) curStep = nextStepId(); return curStep; }
+function goToStep(id) { if (location.hash.slice(1) === id) render(); else location.hash = id; document.getElementById('build').scrollIntoView({ behavior: 'smooth' }); }
+function nextBtn() {
+  const id = nextStepId(), s = ALL.find(x => x.id === id), i = ALL.indexOf(s);
+  return '<div class="btn-row"><button type="button" class="btn" data-next="' + id + '">Continue with ' + (id === 'challenge' ? 'the challenge' : 'Step ' + (i + 1) + ': ' + s.fn + '()') + ' →</button></div>';
+}
+document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-next]'); if (b) goToStep(b.dataset.next); });
 function render() {
   const id = current(), idx = ALL.findIndex(s => s.id === id), s = ALL[idx];
   renderStepper(id);
@@ -1264,6 +1283,7 @@ document.getElementById('copyLog').addEventListener('click', () => {
   if (store.restoredAt) lines.splice(4, 0, 'Includes work brought in from another computer (last added ' + stamp(store.restoredAt) + ')');
   STEPS.forEach((s, i) => {
     lines.push('== Step ' + (i + 1) + ': ' + s.sig + (store.done[s.id] ? '  [done' + (store.doneAt[s.id] ? ' ' + stamp(store.doneAt[s.id]) : '') + ']' : '') + ' ==');
+    if (!store.done[s.id] && (store.reveal[s.id] || 1) > 1) lines.push('Chunks shown: ' + Math.min(store.reveal[s.id], s.chunks.length) + ' of ' + s.chunks.length);
     s.tests.forEach((t, ti) => {
       const v = store.tests[t.id] || {};
       lines.push('Test ' + (ti + 1) + ': ' + t.title + (v.at ? '  (last edited ' + stamp(v.at) + (sameDay(v.at, now) ? ', NEW TODAY' : '') + ')' : '  (not started)'));
@@ -1327,7 +1347,7 @@ function renderCheck() {
   pdfOut.innerHTML = '<div style="display:grid;gap:10px"><p><strong>' + esc(cc.file) + '</strong> · checked ' + stamp(cc.at) + '</p><ul class="cc-list">' +
     ALL.map((s, i) => '<li class="cc-row">' + dieSVG(s.shape, s.color, s.id === 'challenge' ? '9' : String(i + 1), 22) + '<span>' + (s.id === 'challenge' ? '8/10/12/20 buttons' : s.fn + '()') + '</span><span class="pill ' + cc.results[s.id] + '">' + label[cc.results[s.id]] + '</span></li>').join('') + '</ul>' +
     (canMark ? '<div class="btn-row"><button type="button" class="btn" id="ccMark">Check off the functions marked Written</button></div>' : '') +
-    '<p class="muted">This looks for key lines of code. It doesn\'t run your program, so you still need to run your tests.</p></div>';
+    '<p class="muted">This looks for key lines of code. It doesn\'t run your program, so you still need to run your tests.</p>' + (ALL.some(x => store.done[x.id]) ? nextBtn() : '') + '</div>';
   const mk = document.getElementById('ccMark');
   if (mk) mk.addEventListener('click', () => {
     ALL.forEach(s => { if (cc.results[s.id] === 'full' && !store.done[s.id]) { store.done[s.id] = true; store.doneAt[s.id] = Date.now(); } });
@@ -1366,7 +1386,7 @@ function parseStamp(s) {
   return new Date(+m[3], mon, +m[2], h, +m[5]).getTime();
 }
 function parseLog(text) {
-  const out = { name: '', tests: {}, done: {}, ok: false };
+  const out = { name: '', tests: {}, done: {}, reveal: {}, ok: false };
   let step = null, test = null, field = null;
   text.replace(/\r/g, '').replace(/ /g, ' ').split('\n').forEach(raw => {
     let m;
@@ -1378,6 +1398,7 @@ function parseLog(text) {
       if (step && d) out.done[step.id] = parseStamp(d[1]) || Date.now();
       return;
     }
+    if (step && !test && (m = /^Chunks shown: (\d+) of/.exec(raw))) { out.reveal[step.id] = +m[1]; return; }
     if (step && (m = /^Test (\d+): /.exec(raw))) {
       const t = step.tests[+m[1] - 1]; field = null;
       test = t ? (out.tests[t.id] = { p: '', a: '', at: null }) : null;
@@ -1412,6 +1433,11 @@ function mergeLog(o) {
     store.tests[id] = Object.assign({}, cur, { p: inc.p, a: inc.a, at: inc.at || Date.now(), shown: false });
     added++;
   });
+  Object.keys(o.reveal).forEach(id => {
+    const s = ALL.find(x => x.id === id); if (!s) return;
+    const r = Math.min(o.reveal[id], s.chunks.length);
+    if (r > (store.reveal[id] || 1)) { store.reveal[id] = r; s.chunks.forEach((c, i) => { if (c.tryFirst && i < r - 1) store.reveal[id + ':try' + i] = true; }); }
+  });
   Object.keys(o.done).forEach(id => { if (!store.done[id]) { store.done[id] = true; store.doneAt[id] = o.done[id]; doneAdded++; } });
   if (!store.name && o.name) { store.name = o.name; nameEl.value = o.name; }
   store.restoredAt = Date.now();
@@ -1429,7 +1455,7 @@ function restoreFrom(text) {
   const r = mergeLog(o);
   logOut.innerHTML = '<div class="callout"><p><strong>Log added.</strong> Brought in ' + plural(r.added, 'test') + ' and ' + plural(r.doneAdded, 'checked-off step') + '.' +
     (r.keptLocal ? ' ' + plural(r.keptLocal, 'test') + ' had a newer answer on this computer, so ' + (r.keptLocal === 1 ? 'that one was' : 'those were') + ' kept.' : '') +
-    ' Your Testing Log now includes the work from both computers.</p></div>';
+    ' Your Testing Log now includes the work from both computers.</p>' + nextBtn() + '</div>';
   logIn.value = '';
 }
 document.getElementById('logRestore').addEventListener('click', () => restoreFrom(logIn.value));
