@@ -157,6 +157,7 @@ pre.code { background: var(--code-bg); color: var(--code-ink); border-radius: 10
 .lines li { display: grid; gap: 4px; }
 .lines li code { justify-self: start; max-width: 100%; overflow-x: auto; white-space: pre; background: var(--code-bg) !important; color: var(--code-ink); padding: 3px 8px !important; border-radius: 5px; font-size: 0.8rem !important; }
 .tryfirst { border-style: dashed; }
+.callout.locked { background: var(--surface-2); border: 1.5px dashed var(--line); }
 .btn { border: 1.5px solid var(--ink); background: var(--ink); color: var(--bg); border-radius: 8px; padding: 8px 14px; font-weight: 600; font-size: 0.92rem; }
 .btn.ghost { background: transparent; color: var(--ink); }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -212,6 +213,18 @@ table.fill input.no { border-color: var(--bad); background: var(--bad-bg); }
 .log { display: grid; gap: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
 .toast { font-size: 0.85rem; color: var(--ok); font-weight: 600; }
 
+/* Header top row and demo links */
+.topbar { display: flex; justify-content: space-between; align-items: center; gap: 10px 16px; flex-wrap: wrap; margin-bottom: 18px; }
+.topbar .home-link { margin-bottom: 0; }
+.topbar .flint { margin-left: auto; }
+.tlink { color: var(--slate-ink); text-decoration: none; border: 1px solid #50566a; border-radius: 999px; padding: 6px 14px; font-weight: 600; font-size: 0.9rem; white-space: nowrap; }
+.tlink:hover { background: #3a3e4d; }
+.tlink.flint { background: var(--slate-ink); color: var(--slate); border-color: var(--slate-ink); }
+.tlink.flint:hover { background: #ffffff; }
+.demos .tlink { justify-self: center; }
+.demos figcaption { text-align: center; }
+@media (max-width: 620px) { .demos figure:last-child img { max-width: 340px; justify-self: center; } }
+
 /* Demo GIFs in the header */
 .demos { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 16px; margin-top: 26px; max-width: 900px; align-items: start; }
 .demos figure { margin: 0; display: grid; gap: 8px; min-width: 0; }
@@ -256,24 +269,21 @@ input[type="file"] { font: inherit; font-size: 0.9rem; max-width: 100%; }
 
 <header class="tray">
   <div class="wrap">
-    <a class="home-link" href="../">← AP CSP class home</a>
+    <div class="topbar"><a class="home-link" href="../">← AP CSP class home</a><a class="tlink flint" href="https://app.flintk12.com/activities/dice-roller-pro-5e9344" target="_blank" rel="noopener">Ask the Flint AI tutor ↗</a></div>
     <p class="eyebrow">AP CSP · CMU CS Academy · Functions project</p>
     <h1>Dice Roller, one function at a time</h1>
     <p class="lede">You've already built the buttons and the canvas. Now you'll make it work by writing eight small functions. Each one does a single job, and together they make a simplified Google Dice Roller with up to 3 dice: 4, 6, 8, 10, 12 and 20-sided.</p>
-    <div class="tray-links">
-      <a href="https://academy.cs.cmu.edu/sharing/turquoiseCrocodile402747" target="_blank" rel="noopener">Try the finished version ↗</a>
-      <a href="https://share.google/PCoOcoj6POBgq6gYb" target="_blank" rel="noopener">Google's Dice Roller ↗</a>
-      <a href="https://app.flintk12.com/activities/dice-roller-pro-5e9344" target="_blank" rel="noopener">Flint AI tutor ↗</a>
-    </div>
 
     <div class="demos">
       <figure>
+        <a class="tlink" href="https://share.google/PCoOcoj6POBgq6gYb" target="_blank" rel="noopener">Google's Dice Roller ↗</a>
         <img src="../images/google-dice-roller.gif" width="600" height="389" alt="Google's Dice Roller: dice are added, rolled, and the total updates.">
-        <figcaption><strong>Google's Dice Roller</strong>, the app that inspired this project</figcaption>
+        <figcaption>The app that inspired this project</figcaption>
       </figure>
       <figure>
+        <a class="tlink" href="https://academy.cs.cmu.edu/sharing/turquoiseCrocodile402747" target="_blank" rel="noopener">Try the finished version ↗</a>
         <img src="../images/cmu-dice-roller.gif" width="400" height="400" alt="The finished CMU CS Academy Dice Roller: up to three dice are added, rolled, and totaled.">
-        <figcaption><strong>Our CMU CS Academy version</strong>, what you'll build</figcaption>
+        <figcaption>Our CMU CS Academy version: what you'll build</figcaption>
       </figure>
     </div>
 
@@ -1120,6 +1130,9 @@ function shapesStrip() {
 function renderStep(s, idx) {
   const allOpen = !!store.done[s.id];
   const rev = allOpen ? s.chunks.length : Math.min(store.reveal[s.id] || 1, s.chunks.length);
+  /* tests stay locked until the student confirms they typed every chunk */
+  const unlocked = allOpen || (store.reveal[s.id] || 1) > s.chunks.length;
+  const typedCount = allOpen ? s.chunks.length : Math.min((store.reveal[s.id] || 1) - 1, s.chunks.length);
   let h = '';
   h += '<div class="step-title">' + dieSVG(s.shape, s.color, String(idx + 1), 56) + '<div><p class="eyebrow">Step ' + (idx + 1) + ' of 8</p><h3>' + esc(s.sig) + '</h3><p class="job">' + s.job + '</p></div></div>';
   h += '<dl class="sig"><div><dt>Parameters</dt><dd>' + s.params + '</dd></div><div><dt>Returns</dt><dd>' + s.returns + '</dd></div><div><dt>Calls</dt><dd>' + fnChips(s.calls) + '</dd></div><div><dt>Called by</dt><dd>' + fnChips(s.calledBy) + '</dd></div></dl>';
@@ -1143,8 +1156,10 @@ function renderStep(s, idx) {
     h += '</div>';
   });
   const lastTryBlocked = s.chunks[rev - 1] && s.chunks[rev - 1].tryFirst && !allOpen && !store.reveal[s.id + ':try' + (rev - 1)];
-  if (rev < s.chunks.length) {
-    h += '<div class="btn-row"><button type="button" class="btn" data-more="1"' + (lastTryBlocked ? ' disabled' : '') + '>Show chunk ' + (rev + 1) + ' of ' + s.chunks.length + '</button><span class="muted">Type this chunk into your code first.</span></div>';
+  if (!unlocked) {
+    const lastChunk = rev >= s.chunks.length;
+    h += '<div class="btn-row"><button type="button" class="btn" data-more="1"' + (lastTryBlocked ? ' disabled' : '') + '>I typed chunk ' + rev + ' · ' + (lastChunk ? 'Unlock the tests' : 'Show chunk ' + (rev + 1) + ' of ' + s.chunks.length) + '</button><span class="muted">' +
+      (lastChunk ? 'Check your whole function against the chunks above, then unlock the tests.' : 'Type this chunk into your code first.') + '</span></div>';
   } else if (!lastTryBlocked) {
     const full = clean(s.starter).replace(/\n\s*pass$/, '') + '\n' + s.chunks.map(c => clean(c.code)).join('\n\n');
     h += '<details class="full"><summary>See the whole finished function</summary>' + pre(full) + '<p class="muted">Compare it with yours line by line, especially the indentation.</p></details>';
@@ -1152,7 +1167,11 @@ function renderStep(s, idx) {
   h += '</div>';
 
   h += '<div class="sub"><h4>Test it: predict, run, paste</h4><p>Type each test at the very bottom of your program, exactly as shown. Write your prediction <em>before</em> you run it. Then paste the actual console output into the box here and compare.' + (s.id === 'step-1' ? ' (The first console line, <code>GLOBAL: leftDice.sides: 0</code>, comes from the variable section and prints every time you run.)' : '') + '</p>';
-  s.tests.forEach((t, ti) => {
+  if (!unlocked) {
+    h += '<div class="callout locked"><strong>Locked until ' + s.fn + '() is finished</strong><p>You\'ve typed ' + typedCount + ' of ' + s.chunks.length + ' chunks. A function only does its whole job once every chunk is in place, so testing it early gives results that won\'t match the finished function. Type every chunk above, then click <strong>Unlock the tests</strong>.</p>' +
+      '<p class="muted">' + s.tests.length + ' tests are waiting: ' + s.tests.map(t => esc(t.title)).join(' · ') + '</p></div>';
+  }
+  if (unlocked) s.tests.forEach((t, ti) => {
     const v = store.tests[t.id] || {};
     h += '<div class="test" data-test="' + t.id + '"><div class="test-head"><strong>Test ' + (ti + 1) + ': ' + t.title + '</strong></div><div class="test-body">';
     h += t.code ? pre(t.code) : '<p>' + t.manual + '</p>';
@@ -1173,7 +1192,7 @@ function renderStep(s, idx) {
     (pick !== undefined ? '<div class="feedback"><strong>' + (pick === m.a ? 'Yes. ' : 'Not quite. ') + '</strong>' + esc(m.fb) + '</div>' : '') + '</div>';
 
   h += '<div class="bigpic"><p class="eyebrow">The big picture</p><p>' + s.big + '</p></div>';
-  h += footer(s, idx, 'I ran every test for ' + s.fn + '()');
+  h += footer(s, idx, 'I ran every test for ' + s.fn + '()', !unlocked);
   return h;
 }
 
@@ -1188,9 +1207,9 @@ function contextText(s, idx) {
   const rev = Math.min(store.reveal[s.id] || 1, s.chunks.length);
   return 'I\'m working on the Dice Roller project in CMU CS Academy. I\'m on Step ' + (idx + 1) + ' of 8: ' + s.sig + '. I\'ve worked through chunk ' + rev + ' of ' + s.chunks.length + ' ("' + s.chunks[rev - 1].title + '"). My question: ';
 }
-function footer(s, idx, text) {
+function footer(s, idx, text, locked) {
   const prev = ALL[idx - 1], next = ALL[idx + 1];
-  return '<div class="step-foot"><label class="check"><input type="checkbox" id="done-' + s.id + '"' + (store.done[s.id] ? ' checked' : '') + '> ' + text + '</label>' +
+  return '<div class="step-foot"><label class="check' + (locked ? ' muted' : '') + '"><input type="checkbox" id="done-' + s.id + '"' + (store.done[s.id] ? ' checked' : '') + (locked ? ' disabled' : '') + '> ' + text + (locked ? ' (unlocks with the tests)' : '') + '</label>' +
     '<div class="btn-row">' + (prev ? '<button type="button" class="btn ghost" data-nav="' + prev.id + '">← Back</button>' : '') +
     (next ? '<button type="button" class="btn" data-nav="' + next.id + '">Next: ' + (next.id === 'challenge' ? 'the challenge' : next.fn + '()') + ' →</button>' : '') + '</div></div>';
 }
@@ -1302,7 +1321,7 @@ document.getElementById('copyLog').addEventListener('click', () => {
   if (store.restoredAt) lines.splice(4, 0, 'Includes work brought in from another computer (last added ' + stamp(store.restoredAt) + ')');
   STEPS.forEach((s, i) => {
     lines.push('== Step ' + (i + 1) + ': ' + s.sig + (store.done[s.id] ? '  [done' + (store.doneAt[s.id] ? ' ' + stamp(store.doneAt[s.id]) : '') + ']' : '') + ' ==');
-    if (!store.done[s.id] && (store.reveal[s.id] || 1) > 1) lines.push('Chunks shown: ' + Math.min(store.reveal[s.id], s.chunks.length) + ' of ' + s.chunks.length);
+    if (!store.done[s.id] && (store.reveal[s.id] || 1) > 1) lines.push('Chunks shown: ' + Math.min(store.reveal[s.id], s.chunks.length) + ' of ' + s.chunks.length + (store.reveal[s.id] > s.chunks.length ? ' (tests unlocked)' : ''));
     s.tests.forEach((t, ti) => {
       const v = store.tests[t.id] || {};
       lines.push('Test ' + (ti + 1) + ': ' + t.title + (v.at ? '  (last edited ' + stamp(v.at) + (sameDay(v.at, now) ? ', NEW TODAY' : '') + ')' : '  (not started)'));
@@ -1417,7 +1436,7 @@ function parseLog(text) {
       if (step && d) out.done[step.id] = parseStamp(d[1]) || Date.now();
       return;
     }
-    if (step && !test && (m = /^Chunks shown: (\d+) of/.exec(raw))) { out.reveal[step.id] = +m[1]; return; }
+    if (step && !test && (m = /^Chunks shown: (\d+) of/.exec(raw))) { out.reveal[step.id] = +m[1] + (/tests unlocked/.test(raw) ? 1 : 0); return; }
     if (step && (m = /^Test (\d+): /.exec(raw))) {
       const t = step.tests[+m[1] - 1]; field = null;
       test = t ? (out.tests[t.id] = { p: '', a: '', at: null }) : null;
@@ -1454,7 +1473,7 @@ function mergeLog(o) {
   });
   Object.keys(o.reveal).forEach(id => {
     const s = ALL.find(x => x.id === id); if (!s) return;
-    const r = Math.min(o.reveal[id], s.chunks.length);
+    const r = Math.min(o.reveal[id], s.chunks.length + 1);
     if (r > (store.reveal[id] || 1)) { store.reveal[id] = r; s.chunks.forEach((c, i) => { if (c.tryFirst && i < r - 1) store.reveal[id + ':try' + i] = true; }); }
   });
   Object.keys(o.done).forEach(id => { if (!store.done[id]) { store.done[id] = true; store.doneAt[id] = o.done[id]; doneAdded++; } });
